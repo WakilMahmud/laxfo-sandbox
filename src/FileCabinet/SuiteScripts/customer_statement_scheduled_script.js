@@ -9,25 +9,15 @@ define([
     "N/email",
     "N/render",
     "N/file",
-    "N/log",
-    "N/runtime",
-], function (search, email, render, file, log, runtime) {
+    "N/log"
+], function (search, email, render, file, log) {
     const CUSTOMER_REPORT_SEARCH_ID = "customsearch_customer_statement_asm";
 
     const asmEmailPdfMap = {};
+    const DEFAULT_EMAIL = "wakilmahmud30@gmail.com";
 
     async function execute(context) {
         try {
-            // // Load current script
-            // var scriptObj = runtime.getCurrentScript();
-
-            // // Retrieve parameter value by its script parameter ID
-            // var asmEmail = scriptObj.getParameter({
-            //     name: 'custscript_asm_email'
-            // });
-
-            // log.debug('ASM Email Parameter Value', asmEmail);
-
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
 
             for (const companyId in groupedCustomerRecords) {
@@ -66,21 +56,23 @@ define([
 
                 log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
 
-                const { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements);
+                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements);
+
+                if (asmEmail === "- None -") {
+                    asmEmail = DEFAULT_EMAIL;
+                }
 
                 if (!asmEmailPdfMap[asmEmail]) {
                     asmEmailPdfMap[asmEmail] = [];
                 }
 
                 asmEmailPdfMap[asmEmail].push(pdfFileId);
-
-
-                // sendEmailReport(asmEmailPdfMap);
             }
 
             log.debug("ASM Email to PDF File ID Map", asmEmailPdfMap);
 
-            // log.audit("Email Report", "Successfully sent scheduled email report");
+            sendEmailReport(asmEmailPdfMap);
+
         } catch (error) {
             log.error("Email Report Error", error.toString());
         }
@@ -185,8 +177,7 @@ define([
                     </head>
                     <body>
                         <div class="header">
-                            <h1>EUDB Monthly Sales Order Invoice Report Summary</h1>
-                            <p class="header-paragraph">Report Period: For The Month of ${getMonthYearString()}</p>
+                            <h1>Customer Statement Report Summary</h1>
                         </div>
                         
                         
@@ -202,23 +193,14 @@ define([
                             </thead>
                             <tbody>`;
 
-            // // Add data rows
-            // var totalMtdQty = 0;
-            // var totalMtdValue = 0;
-
             parsedCustomerStatements.forEach(function (row) {
-                // totalMtdQty += parseFloat(row.mtdOrderQty) || 0;
-                // totalMtdValue += parseFloat(row.mtdValue) || 0;
-
                 pdfTemplate += `
                 <tr>
                     <td>${escapeXML(row.trandate)}</td>
                     <td>${escapeXML(row.duedate)}</td>
                     <td>${escapeXML(row.tranid)}</td>
                     <td class="number">${formatNumber(row.fxamount)}</td>
-                    <td class="number">${formatCurrency(
-                    row.customer_fxbalance
-                )}</td>
+                    <td class="number">${formatCurrency(row.customer_fxbalance)}</td>
                 </tr>`;
             });
 
@@ -226,12 +208,8 @@ define([
             pdfTemplate += `
                             <tr class="total-row">
                                 <td colspan="3"><strong>Total</strong></td>
-                                <td class="number"><strong>${formatNumber(
-                100.0
-            )}</strong></td>
-                                <td class="number"><strong>$${formatCurrency(
-                200
-            )}</strong></td>
+                                <td class="number"><strong>${formatNumber(100.0)}</strong></td>
+                                <td class="number"><strong>$${formatCurrency(200)}</strong></td>
                             </tr>
                         </tbody>
                     </table>
@@ -244,9 +222,10 @@ define([
 
             let pdfRenderer = render.create();
             pdfRenderer.templateContent = pdfTemplate;
+            const customer = parsedCustomerStatements[0].entity;
 
             let pdfFile = pdfRenderer.renderAsPdf();
-            pdfFile.name = `${parsedCustomerStatements[0].entity}_Customer_Statement_Report_${getDateString()}.pdf`;
+            pdfFile.name = `${customer}_Customer_Statement_Report_${getDateString()}.pdf`;
             pdfFile.folder = 1467; // Email Reports Folder in file cabinet
 
             const pdfFileId = await pdfFile.save();
@@ -274,33 +253,32 @@ define([
 
     function sendEmailReport(asmEmailPdfMap) {
         try {
-            if (!isLastDayOfMonth()) {
-                // don't send email
-                return;
-            }
+            // if (!isLastDayOfMonth()) {
+            //     // don't send email
+            //     return;
+            // }
 
-            var recipientEmails = [];
 
-            var bcc = [];
+            const emailSubject = `Customer Statement Report - ${new Date().toLocaleDateString()}`;
 
-            var cc = [];
-
-            var emailSubject =
-                "EUDB Monthly Sales Order Invoice Report - " +
-                new Date().toLocaleDateString();
-
-            var emailBody = `
+            const emailBody = `
                 <p>Dear Sir,</p>
-                <p>Please find attached the EUDB Monthly Sales Order Invoice Report.</p>
+                <p>Please find the attached Customer Statement Reports.</p>
                 <p>Thank you.</p>
             `;
 
             for (const asmEmail in asmEmailPdfMap) {
                 const pdfFileIdList = asmEmailPdfMap[asmEmail];
 
-                var emailOptions = {
+                const recipientEmails = [asmEmail];
+
+                const bcc = [];
+
+                const cc = [];
+
+                const emailOptions = {
                     author: -5, // System administrator
-                    recipients: [asmEmail],
+                    recipients: recipientEmails,
                     subject: emailSubject,
                     body: emailBody,
                     // bcc,
@@ -310,34 +288,22 @@ define([
                 // Add PDF attachment if generated successfully
                 if (pdfFileIdList.length > 0) {
                     try {
-                        const arrayAttach = [];
+                        const pdfFiles = [];
 
                         for (const pdfFileId of pdfFileIdList) {
                             const pdfFile = file.load({ id: pdfFileId });
-                            arrayAttach.push(pdfFile);
+                            pdfFiles.push(pdfFile);
                         }
 
-                        emailOptions.attachments = arrayAttach;
+                        emailOptions.attachments = pdfFiles;
 
-                        // log.audit(
-                        //     "PDF Attachment",
-                        //     "PDF file loaded successfully: " + pdfFile.name
-                        // );
                     } catch (pdfError) {
                         log.error("PDF Attachment Error", pdfError.toString());
                     }
                 }
 
-                // Send email and log result
-                var emailResult = email.send(emailOptions);
-                // log.audit("Email Sent", {
-                //     result: emailResult,
-                //     recipients: recipientEmails,
-                //     timestamp: new Date().toISOString(),
-                // });
+                // emailResult = email.send(emailOptions);
             }
-
-            return emailResult;
         } catch (error) {
             log.error("Email Send Error", {
                 error: error.toString(),
