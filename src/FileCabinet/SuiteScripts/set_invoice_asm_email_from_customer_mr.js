@@ -1,0 +1,140 @@
+/**
+ * @NApiVersion 2.1
+ * @NScriptType MapReduceScript
+ */
+define(['N/search', 'N/record', 'N/log'], (search, record, log) => {
+
+    const INVOICE_ASM_EMAIL = 'custbody_asm_email';
+    const CUSTOMER_FIELD = 'entity';
+    const CUSTOMER_ASM_EMAIL = 'custentity_asm_email';
+
+    const errors = [];
+
+    // ---------- Input: target invoices ----------
+    function getInputData() {
+        return search.create({
+            type: 'invoice',
+            filters: [
+                [INVOICE_ASM_EMAIL, 'isempty', '']
+            ],
+            columns: [
+                search.createColumn({ name: 'internalid' }),
+                search.createColumn({ name: CUSTOMER_FIELD }),
+                search.createColumn({ name: INVOICE_ASM_EMAIL })
+            ]
+        });
+    }
+
+    // ---------- Map: prepare one key/value per invoice ----------
+    function map(context) {
+        const row = JSON.parse(context.value);
+
+        // log.debug('Processing invoice', { row });
+
+        const invoiceId = row.id;
+        const entityObj = row.values?.[CUSTOMER_FIELD];
+        const customerId = entityObj && entityObj.value;
+        const asmEmailOnInvoice = row.values?.[INVOICE_ASM_EMAIL] || '';
+
+        // Skip if no customer or already has ASM email
+        if (!customerId || asmEmailOnInvoice) {
+            // log.debug('Skip invoice', { invoiceId, customerId, asmEmailOnInvoice });
+            return;
+        }
+
+        context.write({
+            key: String(invoiceId),
+            value: JSON.stringify({
+                invoiceId: invoiceId,
+                customerId: customerId
+            })
+        });
+    }
+
+    // ---------- Reduce: lookup customer email and update invoice ----------
+    function reduce(context) {
+        // One value per invoiceId (key = invoiceId)
+        const payload = JSON.parse(context.values[0]);
+
+        const { invoiceId, customerId } = payload;
+
+
+        try {
+            const customerAsmEmail = lookupCustomerAsmEmail(customerId);
+
+            if (!customerAsmEmail) {
+                // log.debug('Customer has no ASM email; skipping', { invoiceId, customerId });
+                return;
+            }
+
+            record.submitFields({
+                type: record.Type.INVOICE,
+                id: invoiceId,
+                values: { [INVOICE_ASM_EMAIL]: customerAsmEmail }
+            });
+
+            // log.audit('Updated invoice ASM email', { invoiceId, customerId, customerAsmEmail });
+
+        } catch (err) {
+            log.error('Failed to update invoice', { invoiceId, customerId, err });
+        }
+    }
+
+    // ---------- Summarize helpers ----------
+    const collect = (stageSummary, stage) => {
+        if (stageSummary && stageSummary.errors && stageSummary.errors.iterator) {
+            stageSummary.errors.iterator().each((key, err) => {
+                errors.push(`${stage} key ${key}: ${err}`);
+                return true;
+            });
+        }
+    };
+
+    function summarize(summary) {
+        collect(summary.inputSummary, 'INPUT');
+        collect(summary.mapSummary, 'MAP');
+        collect(summary.reduceSummary, 'REDUCE');
+
+        log.audit({
+            title: 'ASM Email Backfill — Summary',
+            details: `Errors: ${errors.length ? errors.join('; ') : 'None'}`
+        });
+    }
+
+    // ---------- Helper: get Customer ASM email ----------
+    function lookupCustomerAsmEmail(customerId) {
+        const info = search.lookupFields({
+            type: record.Type.CUSTOMER,
+            id: customerId,
+            columns: [CUSTOMER_ASM_EMAIL]
+        });
+
+        return info[CUSTOMER_ASM_EMAIL];
+    }
+
+    return {
+        getInputData,
+        map,
+        reduce,
+        summarize
+    };
+});
+
+
+// {
+//     "row": {
+//         "recordType": "invoice",
+//             "id": "8681",
+//                 "values": {
+//             "internalid": {
+//                 "value": "8681",
+//                     "text": "8681"
+//             },
+//             "entity": {
+//                 "value": "6",
+//                     "text": "1 LAXFO Electronics Limited"
+//             },
+//             "custbody_asm_email": ""
+//         }
+//     }
+// }
