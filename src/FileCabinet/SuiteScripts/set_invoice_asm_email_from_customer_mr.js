@@ -15,7 +15,7 @@ define(['N/search', 'N/record', 'N/log'], (search, record, log) => {
         return search.create({
             type: 'invoice',
             filters: [
-                [INVOICE_ASM_EMAIL, 'isempty', '']
+                [INVOICE_ASM_EMAIL, 'is', '']
             ],
             columns: [
                 search.createColumn({ name: 'internalid' }),
@@ -52,15 +52,17 @@ define(['N/search', 'N/record', 'N/log'], (search, record, log) => {
     }
 
     // ---------- Reduce: lookup customer email and update invoice ----------
-    function reduce(context) {
+    async function reduce(context) {
         // One value per invoiceId (key = invoiceId)
         const payload = JSON.parse(context.values[0]);
 
         const { invoiceId, customerId } = payload;
 
+        // log.debug("Payload", payload);
+
 
         try {
-            const customerAsmEmail = lookupCustomerAsmEmail(customerId);
+            const customerAsmEmail = await lookupCustomerAsmEmail(invoiceId);
 
             if (!customerAsmEmail) {
                 // log.debug('Customer has no ASM email; skipping', { invoiceId, customerId });
@@ -102,14 +104,28 @@ define(['N/search', 'N/record', 'N/log'], (search, record, log) => {
     }
 
     // ---------- Helper: get Customer ASM email ----------
-    function lookupCustomerAsmEmail(customerId) {
-        const info = search.lookupFields({
+    async function lookupCustomerAsmEmail(invoiceId) {
+
+        const invoiceRecord = record.load({
+            type: record.Type.INVOICE,
+            id: invoiceId,
+            isDynamic: false
+        });
+
+        const customerInternalId = invoiceRecord.getValue({ fieldId: 'companyid' });
+
+        // log.debug("Customer Internal ID", customerInternalId);
+
+
+        const customerInfo = search.lookupFields({
             type: record.Type.CUSTOMER,
-            id: customerId,
+            id: customerInternalId,
             columns: [CUSTOMER_ASM_EMAIL]
         });
 
-        return info[CUSTOMER_ASM_EMAIL];
+        log.debug("Customer Info", customerInfo);
+
+        return customerInfo[CUSTOMER_ASM_EMAIL];
     }
 
     return {
