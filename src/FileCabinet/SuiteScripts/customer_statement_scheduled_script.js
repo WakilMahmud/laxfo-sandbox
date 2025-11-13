@@ -15,10 +15,13 @@ define([
 
     const asmEmailPdfMap = {};
     const DEFAULT_EMAIL = "wakilmahmud30@gmail.com";
+    const CHARGE_COLUMN_TYPES = ['Invoice', 'Customer Refund'];
+    const PAYMENT_COLUMN_TYPES = ['Payment', 'Credit Memo'];
 
     async function execute(context) {
         try {
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
+
 
             for (const companyId in groupedCustomerRecords) {
                 const customerStatementsList = groupedCustomerRecords[companyId];
@@ -28,37 +31,30 @@ define([
                     (statement) => {
                         return {
                             entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
-                            trandate: statement.values["GROUP(trandate)"] || "",
-                            duedate: statement.values["GROUP(duedate)"] || "",
-                            memomain: statement.values["GROUP(memomain)"] || "",
-                            tranid: statement.values["GROUP(tranid)"] || "",
-                            applyingTransaction_tranid:
-                                statement.values["GROUP(applyingTransaction.tranid)"] || "",
-                            fxamount: parseFloat(statement.values["SUM(fxamount)"]) || 0,
-                            applyingTransaction_fxamount:
-                                parseFloat(
-                                    statement.values["SUM(applyingTransaction.fxamount)"]
-                                ) || 0,
-                            customer_fxbalance:
-                                parseFloat(statement.values["SUM(customer.fxbalance)"]) || 0,
-                            customer_daysoverdue:
-                                statement.values["GROUP(customer.daysoverdue)"] || "",
-                            customer_email: statement.values["GROUP(customer.email)"] || "",
-                            customer_phone: statement.values["GROUP(customer.phone)"] || "",
-                            customer_salesrep:
-                                statement.values["GROUP(customer.salesrep)"]?.[0]?.text || "",
-                            customer_billaddress:
-                                statement.values["GROUP(customer.billaddress)"] || "",
+                            date: statement.values["GROUP(trandate)"] || "",
+                            dueDate: statement.values["GROUP(duedate)"] || "",
+                            memoMain: statement.values["GROUP(memomain)"] || "",
+                            description: statement.values["GROUP(tranid)"] || "",
+                            paymentNumber: statement.values["GROUP(applyingTransaction.tranid)"] || "",
+                            charge: statement.values["SUM(fxamount)"] || 0,
+                            amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
+                            // payment: statement.values["SUM(applyingTransaction.fxamount)"] || 0,
+                            // customer_daysoverdue: statement.values["GROUP(customer.daysoverdue)"] || "",
+                            // customer_email: statement.values["GROUP(customer.email)"] || "",
+                            // customer_phone: statement.values["GROUP(customer.phone)"] || "",
+                            // customer_salesrep: statement.values["GROUP(customer.salesrep)"]?.[0]?.text || "",
+                            customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
                             asm_email: statement.values["GROUP(custbody_asm_email)"] || "",
+                            type: statement.values["GROUP(type)"]?.[0]?.text || "",
                         };
                     }
                 );
 
                 log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
 
-                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements);
+                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements) || {};
 
-                if (asmEmail === "- None -") {
+                if (asmEmail === "- None -" || !asmEmail) {
                     asmEmail = DEFAULT_EMAIL;
                 }
 
@@ -108,12 +104,18 @@ define([
 
             return groupedCustomerRecords;
         } catch (error) {
-            log.error("Error in Saved Search Results", error.message);
+            log.error("Error in Saved Search Results", error);
         }
     }
 
     async function generatePDFReport(parsedCustomerStatements) {
         try {
+            const customerName = escapeXML(parsedCustomerStatements[0].entity);
+            const customerBillAddress = escapeXML(parsedCustomerStatements[0].customerBillAddress);
+            const amountDue = formatNumber(parsedCustomerStatements[0].amountDue);
+            const asmEmail = parsedCustomerStatements[0]?.asm_email;
+
+
             // Create PDF-specific XML template
             let pdfTemplate = `<?xml version="1.0"?>
                 <!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
@@ -128,14 +130,11 @@ define([
                             .header {
                                 background-color: #627fa9;
                                 color: white;
-                                padding: 15px;
+                                padding: 10px;
                                 text-align: center;
                                 margin-bottom: 20px;
-                                font-size: 6pt;
-                                width: 100%;
-                            }
-                            .header-paragraph {
                                 font-size: 8pt;
+                                width: 100%;
                             }
                                 
                             table { 
@@ -173,6 +172,37 @@ define([
                                 color: #666;
                                 width: 100%;
                             }
+
+
+                            .info-table {
+                                width: 100%;
+                                border-collapse: collapse;
+                                margin: 6px 0 12px 0;
+                                font-size: 9pt;
+                            }
+                            .info-left {
+                                width: 70%;
+                                vertical-align: top;
+                                padding: 8px 6px;
+                                border: 1px solid #ddd;
+                            }
+                            .info-right {
+                                width: 30%;
+                                vertical-align: top;
+                                text-align: right;
+                                padding: 8px 6px;
+                                border: 1px solid #ddd;
+                                background-color: #f7fbff;
+                            }
+                            .info-right .label {
+                                font-size: 10pt;
+                                margin-bottom: 2px;
+                            }
+                            .info-right .amount {
+                                font-size: 14pt;
+                                font-weight: bold;
+                            }
+                            .info-left .row { margin-bottom: 4px; }
                         </style>
                     </head>
                     <body>
@@ -180,57 +210,88 @@ define([
                             <h1>Customer Statement Report Summary</h1>
                         </div>
                         
+                        <table class="info-table">
+                            <tr>
+                                <td class="info-left">
+                                    <p class="row"><b>Customer:&nbsp;</b>${customerName}</p>
+                                    <p class="row"><b>Bill To:</b><br/>${customerBillAddress}</p>
+                                </td>
+                                <td class="info-right">
+                                    <p class="label">Amount Due</p>
+                                    <p class="amount">${formatCurrency(amountDue)}</p>
+                                </td>
+                            </tr>
+                        </table>
                         
                         <table>
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Due Date</th>
+                                    <th>Memo</th>
                                     <th>Description</th>
                                     <th>Charge</th>
                                     <th>Payment</th>
+                                    <th>Balance</th>
                                 </tr>
                             </thead>
                             <tbody>`;
 
+            let totalCharge = 0;
+            let totalPayment = 0;
+            let balance = 0;
+
             parsedCustomerStatements.forEach(function (row) {
+
+                let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
+                let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
+
+                totalCharge += isChargeColumn ? (parseFloat(row.charge) || 0) : 0;
+                totalPayment += isPaymentColumn ? (parseFloat(row.charge) || 0) : 0;
+
+                balance += isChargeColumn ? (parseFloat(row.charge) || 0) : -(parseFloat(row.charge) || 0);
+
+                let description = row.type;
+                description += row.description === '- None -' ? "" : ` #${row.description}`;
+
+
+
                 pdfTemplate += `
                 <tr>
-                    <td>${escapeXML(row.trandate)}</td>
-                    <td>${escapeXML(row.duedate)}</td>
-                    <td>${escapeXML(row.tranid)}</td>
-                    <td class="number">${formatNumber(row.fxamount)}</td>
-                    <td class="number">${formatCurrency(row.customer_fxbalance)}</td>
-                </tr>`;
+                    <td>${row.date}</td>
+                    <td>${row.memoMain}</td>
+                    <td>${description}</td>
+                    <td class="number">${isChargeColumn ? formatNumber(row.charge) : ""}</td>
+                    <td class="number">${isPaymentColumn ? formatNumber(row.charge) : ""}</td>
+                    <td class="number">${formatNumber(balance)}</td>
+                </tr> `;
             });
 
             // Add total row
             pdfTemplate += `
-                            <tr class="total-row">
+                <tr class= "total-row">
                                 <td colspan="3"><strong>Total</strong></td>
-                                <td class="number"><strong>${formatNumber(100.0)}</strong></td>
-                                <td class="number"><strong>$${formatCurrency(200)}</strong></td>
+                                <td class="number"><strong>${formatNumber(totalCharge)}</strong></td>
+                                <td class="number"><strong>${formatNumber(totalPayment)}</strong></td>
                             </tr>
                         </tbody>
                     </table>
-                    
-                    <div class="footer">
-                        <p>This report was automatically generated by NetSuite.</p>
-                    </div>
+
+                <div class="footer">
+                    <p>This report was automatically generated by NetSuite.</p>
+                </div>
                 </body>
-             </pdf>`;
+             </pdf> `;
 
             let pdfRenderer = render.create();
             pdfRenderer.templateContent = pdfTemplate;
-            const customer = parsedCustomerStatements[0].entity;
 
             let pdfFile = pdfRenderer.renderAsPdf();
-            pdfFile.name = `${customer}_Customer_Statement_Report_${getDateString()}.pdf`;
+            pdfFile.name = `${customerName}_Customer_Statement_Report_${getDateString()}.pdf`;
             pdfFile.folder = 1467; // Email Reports Folder in file cabinet
 
             const pdfFileId = await pdfFile.save();
 
-            return { asmEmail: parsedCustomerStatements[0]?.asm_email, pdfFileId };
+            return { asmEmail, pdfFileId };
         } catch (error) {
             log.error("PDF Generation Error", error.toString());
             return null;
@@ -317,16 +378,14 @@ define([
      * Helper function to format numbers
      */
     function formatNumber(value) {
-        if (!value || isNaN(value)) return "0";
+        if (!value || isNaN(value)) return "0.00";
         return parseFloat(value).toFixed(2).toLocaleString();
     }
 
-    /**
-     * Helper function to format currency
-     */
-    function formatCurrency(value) {
-        if (!value || isNaN(value)) return "0.00";
-        return parseFloat(value)
+
+    function formatCurrency(value, symbol = "TK") {
+        if (!value || isNaN(value)) return `${symbol} 0.00`;
+        return `${symbol} ` + parseFloat(value)
             .toFixed(2)
             .replace(/\d(?=(\d{3})+\.)/g, "$&,");
     }
@@ -364,154 +423,34 @@ define([
 //     "values": {
 //         "GROUP(entity)": [
 //             {
-//                 "value": "19",
-//                 "text": "3 Tashreeq limited"
+//                 "value": "7",
+//                 "text": "2 DBL Group"
 //             }
 //         ],
-//         "GROUP(trandate)": "22/10/2024",
+//         "GROUP(trandate)": "3/11/2024", //* Date
 //         "GROUP(duedate)": "",
-//         "GROUP(memomain)": "Tashriq",
-//         "GROUP(tranid)": "INV-000000001",
-//         "GROUP(applyingTransaction.tranid)": "PY-0000000001",
-//         "SUM(fxamount)": "625.00",
-//         "SUM(applyingTransaction.fxamount)": "-625.00",
-//         "SUM(customer.fxbalance)": "13905.00",
-//         "GROUP(customer.daysoverdue)": "345",
-//         "GROUP(customer.email)": "amit@dbl-digital.com",
-//         "GROUP(customer.phone)": "+8801756060501",
+//         "GROUP(memomain)": "- None -", //* Memo
+//         "GROUP(tranid)": "PY-0000000003", //* Description
+//         "GROUP(applyingTransaction.tranid)": "- None -",
+//         "SUM(fxamount)": "10.00", //* Invoice
+//         "SUM(applyingTransaction.fxamount)": ".00", //* Payment
+//         "SUM(customer.fxbalance)": "4700.00", //* Amount Due
+//         "GROUP(customer.daysoverdue)": "333",
+//         "GROUP(customer.email)": "- None -",
+//         "GROUP(customer.phone)": "- None -",
 //         "GROUP(customer.salesrep)": [
 //             {
 //                 "value": "",
 //                 "text": "- None -"
 //             }
 //         ],
-//         "GROUP(customer.billaddress)": "Tashreeq limited Mohammadpur, Dhaka Bangladesh",
-//         "GROUP(custbody_asm_email)": "farid@dbl-digital.com"
+//         "GROUP(customer.billaddress)": "- None -", //* Customer billAddress
+//         "GROUP(custbody_asm_email)": "- None -", //* ASM Email
+//         "GROUP(type)": [
+//             {
+//                 "value": "CustPymt",
+//                 "text": "Payment"
+//             }
+//         ]
 //     }
 // }
-
-//TODO: -------------------------------parsedCustomerStatements List--------------------------------------------
-
-//TODO: Date        Charge         Payment
-
-// [
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "22/10/2024",   //* Date
-//         "duedate": "",
-//         "memomain": "Tashriq",
-//         "tranid": "INV-000000001",
-//         "applyingTransaction_tranid": "PY-0000000001",
-//         "fxamount": 625,   //* Charge
-//         "applyingTransaction_fxamount": -625, Payment
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "farid@dbl-digital.com"
-//     },
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "24/10/2024",
-//         "duedate": "",
-//         "memomain": "sale",
-//         "tranid": "INV-000000002",
-//         "applyingTransaction_tranid": "PY-0000000002",
-//         "fxamount": 11000,
-//         "applyingTransaction_fxamount": -11000,
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "farid@dbl-digital.com"
-//     },
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "3/11/2024",
-//         "duedate": "",
-//         "memomain": "- None -",
-//         "tranid": "INV-000000004",
-//         "applyingTransaction_tranid": "PY-0000000004",
-//         "fxamount": 600,
-//         "applyingTransaction_fxamount": -600,
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "- None -"
-//     },
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "4/11/2024",
-//         "duedate": "",
-//         "memomain": "- None -",
-//         "tranid": "INV-000000005",
-//         "applyingTransaction_tranid": "PY-0000000005",
-//         "fxamount": 1000,
-//         "applyingTransaction_fxamount": -1000,
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "- None -"
-//     },
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "6/11/2024",
-//         "duedate": "",
-//         "memomain": "- None -",
-//         "tranid": "INV-000000006",
-//         "applyingTransaction_tranid": "PY-0000000006",
-//         "fxamount": 5000,
-//         "applyingTransaction_fxamount": -5000,
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "- None -"
-//     },
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "26/11/2024",
-//         "duedate": "26/11/2024",
-//         "memomain": "- None -",
-//         "tranid": "INV-000000008",
-//         "applyingTransaction_tranid": "- None -",
-//         "fxamount": 5,
-//         "applyingTransaction_fxamount": 0,
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "- None -"
-//     },
-//     {
-//         "entity": "3 Tashreeq limited",
-//         "trandate": "26/11/2024",
-//         "duedate": "",
-//         "memomain": "- None -",
-//         "tranid": "INV-000000011",
-//         "applyingTransaction_tranid": "PY-0000000008",
-//         "fxamount": 11700,
-//         "applyingTransaction_fxamount": -11700,
-//         "customer_fxbalance": 13905,
-//         "customer_daysoverdue": "345",
-//         "customer_email": "amit@dbl-digital.com",
-//         "customer_phone": "+8801756060501",
-//         "customer_salesrep": "- None -",
-//         "customer_billaddress": "Tashreeq limited\nMohammadpur, Dhaka\nBangladesh",
-//         "asm_email": "- None -"
-//     }
-// ]
