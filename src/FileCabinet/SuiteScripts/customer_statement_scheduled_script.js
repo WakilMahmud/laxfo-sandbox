@@ -9,17 +9,41 @@ define([
     "N/email",
     "N/render",
     "N/file",
-    "N/log"
-], function (search, email, render, file, log) {
+    "N/log",
+    "N/runtime"
+], function (search, email, render, file, log, runtime) {
     const CUSTOMER_REPORT_SEARCH_ID = "customsearch_customer_statement_asm";
 
     const asmEmailPdfMap = {};
-    const DEFAULT_EMAIL = "wakilmahmud30@gmail.com";
+    const DEFAULT_EMAIL = "farid@dbl-digital.com";
     const CHARGE_COLUMN_TYPES = ['Invoice', 'Customer Refund'];
     const PAYMENT_COLUMN_TYPES = ['Payment', 'Credit Memo'];
+    // const EMAIL_REPORT_FOLDER_ID = 1175;
+    const EMAIL_REPORT_FOLDER_ID = 1467;
 
     async function execute(context) {
         try {
+            // Get script parameters (if triggered from Suitelet)
+            const script = runtime.getCurrentScript();
+
+            const startDate = script.getParameter({ name: 'custscript_cs_start_date' });
+            const statementDate = script.getParameter({ name: 'custscript_cs_end_date' });
+            const subsidiary = script.getParameter({ name: 'custscript_cs_subsidiary' });
+            const emailTo = script.getParameter({ name: 'custscript_cs_email_to' }) ? script.getParameter({ name: 'custscript_cs_email_to' }).split(',').filter(Boolean) : [];
+            const emailCc = script.getParameter({ name: 'custscript_cs_email_cc' }) ? script.getParameter({ name: 'custscript_cs_email_cc' }).split(',').filter(Boolean) : [];
+            const emailBcc = script.getParameter({ name: 'custscript_cs_email_bcc' }) ? script.getParameter({ name: 'custscript_cs_email_bcc' }).split(',').filter(Boolean) : [];
+
+
+            log.audit('Script Parameters', {
+                startDate: startDate,
+                statementDate: statementDate,
+                subsidiary: subsidiary,
+                emailTo: emailTo,
+                emailCc: emailCc,
+                emailBcc: emailBcc
+            });
+
+
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
 
 
@@ -32,27 +56,22 @@ define([
                         return {
                             entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
                             date: statement.values["GROUP(trandate)"] || "",
-                            dueDate: statement.values["GROUP(duedate)"] || "",
                             memoMain: statement.values["GROUP(memomain)"] || "",
                             description: statement.values["GROUP(tranid)"] || "",
-                            paymentNumber: statement.values["GROUP(applyingTransaction.tranid)"] || "",
                             charge: statement.values["SUM(fxamount)"] || 0,
                             amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
-                            // payment: statement.values["SUM(applyingTransaction.fxamount)"] || 0,
-                            // customer_daysoverdue: statement.values["GROUP(customer.daysoverdue)"] || "",
-                            // customer_email: statement.values["GROUP(customer.email)"] || "",
-                            // customer_phone: statement.values["GROUP(customer.phone)"] || "",
-                            // customer_salesrep: statement.values["GROUP(customer.salesrep)"]?.[0]?.text || "",
                             customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
-                            asm_email: statement.values["GROUP(custbody_asm_email)"] || "",
+                            asmEmail: statement.values["GROUP(custbody_asm_email)"] || "",
                             type: statement.values["GROUP(type)"]?.[0]?.text || "",
                         };
                     }
                 );
 
-                log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
+                // log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
 
                 let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements) || {};
+
+                // log.debug("Generated PDF Report", { asmEmail, pdfFileId });
 
                 if (asmEmail === "- None -" || !asmEmail) {
                     asmEmail = DEFAULT_EMAIL;
@@ -67,7 +86,7 @@ define([
 
             log.debug("ASM Email to PDF File ID Map", asmEmailPdfMap);
 
-            sendEmailReport(asmEmailPdfMap);
+            sendEmailReport(asmEmailPdfMap, emailTo, emailCc, emailBcc);
 
         } catch (error) {
             log.error("Email Report Error", error.toString());
@@ -113,7 +132,8 @@ define([
             const customerName = escapeXML(parsedCustomerStatements[0].entity);
             const customerBillAddress = escapeXML(parsedCustomerStatements[0].customerBillAddress);
             const amountDue = formatNumber(parsedCustomerStatements[0].amountDue);
-            const asmEmail = parsedCustomerStatements[0]?.asm_email;
+            let asmEmail = "";
+            // const asmEmail = parsedCustomerStatements[0]?.asmEmail;
 
 
             // Create PDF-specific XML template
@@ -245,14 +265,19 @@ define([
                 let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
                 let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
 
-                totalCharge += isChargeColumn ? (parseFloat(row.charge) || 0) : 0;
-                totalPayment += isPaymentColumn ? (parseFloat(row.charge) || 0) : 0;
+                const charge = getAbsoluteValue(row.charge);
 
-                balance += isChargeColumn ? (parseFloat(row.charge) || 0) : -(parseFloat(row.charge) || 0);
+                totalCharge += isChargeColumn ? charge : 0;
+                totalPayment += isPaymentColumn ? charge : 0;
+
+                balance += isChargeColumn ? charge : -charge;
 
                 let description = row.type;
                 description += row.description === '- None -' ? "" : ` #${row.description}`;
 
+                if (!asmEmail && row.type === 'Invoice' && row.asmEmail !== '- None -') {
+                    asmEmail = row.asmEmail;
+                }
 
 
                 pdfTemplate += `
@@ -260,8 +285,8 @@ define([
                     <td>${row.date}</td>
                     <td>${row.memoMain}</td>
                     <td>${description}</td>
-                    <td class="number">${isChargeColumn ? formatNumber(row.charge) : ""}</td>
-                    <td class="number">${isPaymentColumn ? formatNumber(row.charge) : ""}</td>
+                    <td class="number">${isChargeColumn ? formatNumber(charge) : ""}</td>
+                    <td class="number">${isPaymentColumn ? formatNumber(charge) : ""}</td>
                     <td class="number">${formatNumber(balance)}</td>
                 </tr> `;
             });
@@ -287,7 +312,7 @@ define([
 
             let pdfFile = pdfRenderer.renderAsPdf();
             pdfFile.name = `${customerName}_Customer_Statement_Report_${getDateString()}.pdf`;
-            pdfFile.folder = 1467; // Email Reports Folder in file cabinet
+            pdfFile.folder = EMAIL_REPORT_FOLDER_ID; // Email Reports Folder in file cabinet
 
             const pdfFileId = await pdfFile.save();
 
@@ -312,13 +337,18 @@ define([
             .replace(/'/g, "&#39;");
     }
 
-    function sendEmailReport(asmEmailPdfMap) {
+    function getAbsoluteValue(value) {
+        const num = Number(value);
+        if (isNaN(num)) return 0;
+        return Math.abs(num);
+    }
+
+    function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = []) {
         try {
             // if (!isLastDayOfMonth()) {
             //     // don't send email
             //     return;
             // }
-
 
             const emailSubject = `Customer Statement Report - ${new Date().toLocaleDateString()}`;
 
@@ -331,20 +361,24 @@ define([
             for (const asmEmail in asmEmailPdfMap) {
                 const pdfFileIdList = asmEmailPdfMap[asmEmail];
 
-                const recipientEmails = [asmEmail];
+                const recipientEmail = [asmEmail];
 
-                const bcc = [];
-
-                const cc = [];
 
                 const emailOptions = {
                     author: -5, // System administrator
-                    recipients: recipientEmails,
+                    recipients: recipientEmail,
                     subject: emailSubject,
-                    body: emailBody,
-                    // bcc,
-                    // cc
+                    body: emailBody
                 };
+
+                if (paramEmailCc.length > 0) {
+                    emailOptions.cc = paramEmailCc;
+                }
+
+                if (paramEmailBcc.length > 0) {
+                    emailOptions.bcc = paramEmailBcc;
+                }
+
 
                 // Add PDF attachment if generated successfully
                 if (pdfFileIdList.length > 0) {
@@ -363,7 +397,14 @@ define([
                     }
                 }
 
-                // emailResult = email.send(emailOptions);
+
+                if (paramEmailTo.length > 0 && paramEmailTo.includes(asmEmail)) {
+                    // send email to selected asm email only
+                    // email.send(emailOptions);
+                } else {
+                    // send email to all asm emails
+                    // email.send(emailOptions);
+                }
             }
         } catch (error) {
             log.error("Email Send Error", {
@@ -374,9 +415,6 @@ define([
         }
     }
 
-    /**
-     * Helper function to format numbers
-     */
     function formatNumber(value) {
         if (!value || isNaN(value)) return "0.00";
         return parseFloat(value).toFixed(2).toLocaleString();
@@ -390,27 +428,11 @@ define([
             .replace(/\d(?=(\d{3})+\.)/g, "$&,");
     }
 
-    function getMonthYearString(date = new Date()) {
-        return date.toLocaleString("en-US", { month: "long", year: "numeric" });
-    }
-
-    function isLastDayOfMonth(date = new Date()) {
-        const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-        return (
-            date.getDate() === endDate.getDate() &&
-            date.getMonth() === endDate.getMonth() &&
-            date.getFullYear() === endDate.getFullYear()
-        );
-    }
-
-    /**
-     * Get date string for file naming
-     */
     function getDateString() {
-        var today = new Date();
-        var year = today.getFullYear();
-        var month = String(today.getMonth() + 1).padStart(2, "0");
-        var day = String(today.getDate()).padStart(2, "0");
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, "0");
+        const day = String(today.getDate()).padStart(2, "0");
         return `${day}/${month}/${year}`;
     }
 
@@ -418,39 +440,3 @@ define([
         execute: execute,
     };
 });
-
-// {
-//     "values": {
-//         "GROUP(entity)": [
-//             {
-//                 "value": "7",
-//                 "text": "2 DBL Group"
-//             }
-//         ],
-//         "GROUP(trandate)": "3/11/2024", //* Date
-//         "GROUP(duedate)": "",
-//         "GROUP(memomain)": "- None -", //* Memo
-//         "GROUP(tranid)": "PY-0000000003", //* Description
-//         "GROUP(applyingTransaction.tranid)": "- None -",
-//         "SUM(fxamount)": "10.00", //* Invoice
-//         "SUM(applyingTransaction.fxamount)": ".00", //* Payment
-//         "SUM(customer.fxbalance)": "4700.00", //* Amount Due
-//         "GROUP(customer.daysoverdue)": "333",
-//         "GROUP(customer.email)": "- None -",
-//         "GROUP(customer.phone)": "- None -",
-//         "GROUP(customer.salesrep)": [
-//             {
-//                 "value": "",
-//                 "text": "- None -"
-//             }
-//         ],
-//         "GROUP(customer.billaddress)": "- None -", //* Customer billAddress
-//         "GROUP(custbody_asm_email)": "- None -", //* ASM Email
-//         "GROUP(type)": [
-//             {
-//                 "value": "CustPymt",
-//                 "text": "Payment"
-//             }
-//         ]
-//     }
-// }
