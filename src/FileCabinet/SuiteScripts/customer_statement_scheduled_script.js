@@ -69,9 +69,7 @@ define([
 
                 // log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
 
-                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements) || {};
-
-                // log.debug("Generated PDF Report", { asmEmail, pdfFileId });
+                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate) || {};
 
                 if (asmEmail === "- None -" || !asmEmail) {
                     asmEmail = DEFAULT_EMAIL;
@@ -127,13 +125,41 @@ define([
         }
     }
 
-    async function generatePDFReport(parsedCustomerStatements) {
+    async function generatePDFReport(parsedCustomerStatements, startDate) {
         try {
             const customerName = escapeXML(parsedCustomerStatements[0].entity);
             const customerBillAddress = escapeXML(parsedCustomerStatements[0].customerBillAddress);
             const amountDue = formatNumber(parsedCustomerStatements[0].amountDue);
             let asmEmail = "";
-            // const asmEmail = parsedCustomerStatements[0]?.asmEmail;
+
+            let visibleCustomerStatements = parsedCustomerStatements;
+            let filteredParsedCustomerStatements = [];
+
+
+            let totalPrevCharge = 0;
+            let totalPrevPayment = 0;
+            let balanceForward = 0;
+
+            if (startDate) {
+                filteredParsedCustomerStatements = parsedCustomerStatements.filter(row => {
+                    let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
+                    let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
+
+                    const charge = getAbsoluteValue(row.charge);
+
+                    totalPrevCharge += isChargeColumn ? charge : 0;
+                    totalPrevPayment += isPaymentColumn ? charge : 0;
+
+                    const rowDateISO = new Date(formatDateToISO(row.date));
+                    const startDateISO = new Date(formatDateToISO(startDate));
+
+                    if (rowDateISO < startDateISO) {
+                        balanceForward += isChargeColumn ? charge : -charge;
+                    }
+
+                    return rowDateISO >= startDateISO;
+                });
+            }
 
 
             // Create PDF-specific XML template
@@ -256,11 +282,27 @@ define([
                             </thead>
                             <tbody>`;
 
-            let totalCharge = 0;
-            let totalPayment = 0;
-            let balance = 0;
 
-            parsedCustomerStatements.forEach(function (row) {
+            if (startDate) {
+                visibleCustomerStatements = filteredParsedCustomerStatements;
+
+                pdfTemplate += `
+                <tr>
+                    <td>${startDate}</td>
+                    <td></td>
+                    <td>Balance Forward</td>
+                    <td class="number"></td>
+                    <td class="number"></td>
+                    <td class="number">${formatNumber(balanceForward)}</td>
+                </tr> `;
+            }
+
+
+            let totalCharge = totalPrevCharge;
+            let totalPayment = totalPrevPayment;
+            let balance = balanceForward;
+
+            visibleCustomerStatements.forEach(function (row) {
 
                 let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
                 let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
@@ -323,6 +365,12 @@ define([
         }
     }
 
+    // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
+    function formatDateToISO(dateStr) {
+        const [day, month, year] = dateStr.split('/');
+        return `${year}-${month}-${day}`;
+    }
+
     /**
      * Helper function to escape XML special characters
      */
@@ -345,11 +393,6 @@ define([
 
     function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = []) {
         try {
-            // if (!isLastDayOfMonth()) {
-            //     // don't send email
-            //     return;
-            // }
-
             const emailSubject = `Customer Statement Report - ${new Date().toLocaleDateString()}`;
 
             const emailBody = `
