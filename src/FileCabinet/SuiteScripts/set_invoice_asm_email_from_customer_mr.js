@@ -135,22 +135,3 @@ define(['N/search', 'N/record', 'N/log'], (search, record, log) => {
         summarize
     };
 });
-
-
-// {
-//     "row": {
-//         "recordType": "invoice",
-//             "id": "8681",
-//                 "values": {
-//             "internalid": {
-//                 "value": "8681",
-//                     "text": "8681"
-//             },
-//             "entity": {
-//                 "value": "6",
-//                     "text": "1 LAXFO Electronics Limited"
-//             },
-//             "custbody_asm_email": ""
-//         }
-//     }
-// }

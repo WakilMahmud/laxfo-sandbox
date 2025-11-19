@@ -13,6 +13,7 @@ define([
     "N/runtime"
 ], function (search, email, render, file, log, runtime) {
     const CUSTOMER_REPORT_SEARCH_ID = "customsearch_customer_statement_asm";
+    const PARAM_PAYLOAD = 'custscript_customer_statement';
 
     const asmEmailPdfMap = {};
     const DEFAULT_EMAIL = "farid@dbl-digital.com";
@@ -23,24 +24,33 @@ define([
 
     async function execute(context) {
         try {
-            // Get script parameters (if triggered from Suitelet)
+            // Retrieve parameters passed from Suitelet
             const script = runtime.getCurrentScript();
+            const payload = JSON.parse(script.getParameter({ name: PARAM_PAYLOAD }));
 
-            const startDate = script.getParameter({ name: 'custscript_cs_start_date' });
-            const statementDate = script.getParameter({ name: 'custscript_cs_end_date' });
-            const subsidiary = script.getParameter({ name: 'custscript_cs_subsidiary' });
-            const emailTo = script.getParameter({ name: 'custscript_cs_email_to' }) ? script.getParameter({ name: 'custscript_cs_email_to' }).split(',').filter(Boolean) : [];
-            const emailCc = script.getParameter({ name: 'custscript_cs_email_cc' }) ? script.getParameter({ name: 'custscript_cs_email_cc' }).split(',').filter(Boolean) : [];
-            const emailBcc = script.getParameter({ name: 'custscript_cs_email_bcc' }) ? script.getParameter({ name: 'custscript_cs_email_bcc' }).split(',').filter(Boolean) : [];
+
+            const startDate = payload.startDate ? formatToDDMMYYYY(payload.startDate) : "";
+            const statementDate = payload.statementDate ? formatToDDMMYYYY(payload.statementDate) : "";
+            const willSendEmail = payload.sendEmailReport;
+
+            let sendToEmails = payload.sendToEmails;
+            let ccEmails = payload.ccEmails;
+            let bccEmails = payload.bccEmails;
+
+            sendToEmails = sendToEmails.filter(email => Boolean(email));
+            ccEmails = ccEmails.filter(email => Boolean(email));
+            bccEmails = bccEmails.filter(email => Boolean(email));
+
 
 
             log.audit('Script Parameters', {
-                startDate: startDate,
-                statementDate: statementDate,
-                subsidiary: subsidiary,
-                emailTo: emailTo,
-                emailCc: emailCc,
-                emailBcc: emailBcc
+                startDate,
+                statementDate,
+                sendEmailReport,
+                sendToEmails,
+                ccEmails,
+                bccEmails,
+                willSendEmail
             });
 
 
@@ -56,7 +66,6 @@ define([
                         return {
                             entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
                             date: statement.values["GROUP(trandate)"] || "",
-                            memoMain: statement.values["GROUP(memomain)"] || "",
                             description: statement.values["GROUP(tranid)"] || "",
                             charge: statement.values["SUM(fxamount)"] || 0,
                             amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
@@ -84,7 +93,7 @@ define([
 
             log.debug("ASM Email to PDF File ID Map", asmEmailPdfMap);
 
-            sendEmailReport(asmEmailPdfMap, emailTo, emailCc, emailBcc);
+            sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail);
 
         } catch (error) {
             log.error("Email Report Error", error.toString());
@@ -273,7 +282,6 @@ define([
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Memo</th>
                                     <th>Description</th>
                                     <th>Charge</th>
                                     <th>Payment</th>
@@ -289,7 +297,6 @@ define([
                 pdfTemplate += `
                 <tr>
                     <td>${startDate}</td>
-                    <td></td>
                     <td>Balance Forward</td>
                     <td class="number"></td>
                     <td class="number"></td>
@@ -325,7 +332,6 @@ define([
                 pdfTemplate += `
                 <tr>
                     <td>${row.date}</td>
-                    <td>${row.memoMain}</td>
                     <td>${description}</td>
                     <td class="number">${isChargeColumn ? formatNumber(charge) : ""}</td>
                     <td class="number">${isPaymentColumn ? formatNumber(charge) : ""}</td>
@@ -336,9 +342,10 @@ define([
             // Add total row
             pdfTemplate += `
                 <tr class= "total-row">
-                                <td colspan="3"><strong>Total</strong></td>
+                                <td colspan="2"><strong>Total</strong></td>
                                 <td class="number"><strong>${formatNumber(totalCharge)}</strong></td>
                                 <td class="number"><strong>${formatNumber(totalPayment)}</strong></td>
+                                <td class="number"><strong>${formatNumber(amountDue)}</strong></td>
                             </tr>
                         </tbody>
                     </table>
@@ -391,7 +398,21 @@ define([
         return Math.abs(num);
     }
 
-    function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = []) {
+    function formatToDDMMYYYY(dateStr) {
+        if (!dateStr) return "";
+
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return ""; // invalid date
+
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+
+        return `${day}/${month}/${year}`;
+    }
+
+
+    function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = [], willSendEmail) {
         try {
             const emailSubject = `Customer Statement Report - ${new Date().toLocaleDateString()}`;
 
@@ -441,13 +462,13 @@ define([
                 }
 
 
-                if (paramEmailTo.length > 0 && paramEmailTo.includes(asmEmail)) {
+                if (willSendEmail && paramEmailTo.length > 0 && paramEmailTo.includes(asmEmail)) {
                     // send email to selected asm email only
-                    // email.send(emailOptions);
-                } else {
-                    // send email to all asm emails
-                    // email.send(emailOptions);
+                    email.send(emailOptions);
                 }
+
+                // send email to all asm emails
+                // email.send(emailOptions);
             }
         } catch (error) {
             log.error("Email Send Error", {
