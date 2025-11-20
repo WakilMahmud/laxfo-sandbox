@@ -18,9 +18,9 @@ define([
     const asmEmailPdfMap = {};
     const DEFAULT_EMAIL = "farid@dbl-digital.com";
     const CHARGE_COLUMN_TYPES = ['Invoice', 'Customer Refund'];
-    const PAYMENT_COLUMN_TYPES = ['Payment', 'Credit Memo'];
-    // const EMAIL_REPORT_FOLDER_ID = 1175;
-    const EMAIL_REPORT_FOLDER_ID = 1467;
+    const PAYMENT_COLUMN_TYPES = ['Receipt', 'Credit Memo'];
+
+    const EMAIL_REPORT_FOLDER_ID = 1467; // 843
 
     async function execute(context) {
         try {
@@ -28,8 +28,9 @@ define([
             const script = runtime.getCurrentScript();
             const payload = JSON.parse(script.getParameter({ name: PARAM_PAYLOAD }));
 
+            // log.debug('Payload Received', payload);
 
-            const startDate = payload.startDate ? formatToDDMMYYYY(payload.startDate) : "";
+            const startDate = payload?.startDate ? formatToDDMMYYYY(payload?.startDate) : "";
             const statementDate = payload.statementDate ? formatToDDMMYYYY(payload.statementDate) : "";
             const willSendEmail = payload.sendEmailReport;
 
@@ -43,15 +44,15 @@ define([
 
 
 
-            log.audit('Script Parameters', {
-                startDate,
-                statementDate,
-                sendEmailReport,
-                sendToEmails,
-                ccEmails,
-                bccEmails,
-                willSendEmail
-            });
+            // log.audit('Script Parameters', {
+            //     startDate,
+            //     statementDate,
+            //     willSendEmail,
+            //     sendToEmails,
+            //     ccEmails,
+            //     bccEmails,
+            //     willSendEmail
+            // });
 
 
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
@@ -70,7 +71,8 @@ define([
                             charge: statement.values["SUM(fxamount)"] || 0,
                             amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
                             customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
-                            asmEmail: statement.values["GROUP(custbody_asm_email)"] || "",
+                            // asmEmail: statement.values["GROUP(custbody_asm_email)"] || "",
+                            asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
                             type: statement.values["GROUP(type)"]?.[0]?.text || "",
                         };
                     }
@@ -78,7 +80,7 @@ define([
 
                 // log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
 
-                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate) || {};
+                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate) || {};
 
                 if (asmEmail === "- None -" || !asmEmail) {
                     asmEmail = DEFAULT_EMAIL;
@@ -117,7 +119,7 @@ define([
                 myPage.data.forEach(function (res) {
                     const result = JSON.parse(JSON.stringify(res));
 
-                    // log.debug("Search Result Row", result);
+                    log.debug("Search Result Row", result);
 
                     const entity = result.values["GROUP(entity)"]?.[0]?.value;
                     if (!groupedCustomerRecords[entity])
@@ -134,7 +136,7 @@ define([
         }
     }
 
-    async function generatePDFReport(parsedCustomerStatements, startDate) {
+    async function generatePDFReport(parsedCustomerStatements, startDate, statementDate) {
         try {
             const customerName = escapeXML(parsedCustomerStatements[0].entity);
             const customerBillAddress = escapeXML(parsedCustomerStatements[0].customerBillAddress);
@@ -161,12 +163,13 @@ define([
 
                     const rowDateISO = new Date(formatDateToISO(row.date));
                     const startDateISO = new Date(formatDateToISO(startDate));
+                    const statementDateISO = new Date(formatDateToISO(statementDate));
 
                     if (rowDateISO < startDateISO) {
                         balanceForward += isChargeColumn ? charge : -charge;
                     }
 
-                    return rowDateISO >= startDateISO;
+                    return rowDateISO >= startDateISO && rowDateISO <= statementDateISO;
                 });
             }
 
@@ -273,7 +276,7 @@ define([
                                 </td>
                                 <td class="info-right">
                                     <p class="label">Amount Due</p>
-                                    <p class="amount">${formatCurrency(amountDue)}</p>
+                                    <p class="amount">${formatCurrency(amountDue, true)}</p>
                                 </td>
                             </tr>
                         </table>
@@ -283,7 +286,7 @@ define([
                                 <tr>
                                     <th>Date</th>
                                     <th>Description</th>
-                                    <th>Charge</th>
+                                    <th>Invoice</th>
                                     <th>Payment</th>
                                     <th>Balance</th>
                                 </tr>
@@ -300,7 +303,7 @@ define([
                     <td>Balance Forward</td>
                     <td class="number"></td>
                     <td class="number"></td>
-                    <td class="number">${formatNumber(balanceForward)}</td>
+                    <td class="number">${formatCurrency(balanceForward)}</td>
                 </tr> `;
             }
 
@@ -333,9 +336,9 @@ define([
                 <tr>
                     <td>${row.date}</td>
                     <td>${description}</td>
-                    <td class="number">${isChargeColumn ? formatNumber(charge) : ""}</td>
-                    <td class="number">${isPaymentColumn ? formatNumber(charge) : ""}</td>
-                    <td class="number">${formatNumber(balance)}</td>
+                    <td class="number">${isChargeColumn ? formatCurrency(charge) : ""}</td>
+                    <td class="number">${isPaymentColumn ? formatCurrency(charge) : ""}</td>
+                    <td class="number">${formatCurrency(balance)}</td>
                 </tr> `;
             });
 
@@ -343,9 +346,9 @@ define([
             pdfTemplate += `
                 <tr class= "total-row">
                                 <td colspan="2"><strong>Total</strong></td>
-                                <td class="number"><strong>${formatNumber(totalCharge)}</strong></td>
-                                <td class="number"><strong>${formatNumber(totalPayment)}</strong></td>
-                                <td class="number"><strong>${formatNumber(amountDue)}</strong></td>
+                                <td class="number"><strong>${formatCurrency(totalCharge)}</strong></td>
+                                <td class="number"><strong>${formatCurrency(totalPayment)}</strong></td>
+                                <td class="number"><strong>${formatCurrency(balance, true)}</strong></td>
                             </tr>
                         </tbody>
                     </table>
@@ -464,7 +467,7 @@ define([
 
                 if (willSendEmail && paramEmailTo.length > 0 && paramEmailTo.includes(asmEmail)) {
                     // send email to selected asm email only
-                    email.send(emailOptions);
+                    // email.send(emailOptions);
                 }
 
                 // send email to all asm emails
@@ -485,12 +488,29 @@ define([
     }
 
 
-    function formatCurrency(value, symbol = "TK") {
-        if (!value || isNaN(value)) return `${symbol} 0.00`;
-        return `${symbol} ` + parseFloat(value)
-            .toFixed(2)
-            .replace(/\d(?=(\d{3})+\.)/g, "$&,");
+    function formatCurrency(value, isSymbolBefore = false, symbol = "TK") {
+        if (!value || isNaN(value)) return `${isSymbolBefore ? symbol : ""} 0.00`;
+
+        // Convert to fixed 2 decimals
+        let num = parseFloat(value).toFixed(2);
+
+        // Split integer & decimal
+        let [intPart, decPart] = num.split(".");
+
+        // Handle Indian/Bangladeshi format
+        // Last 3 digits stay together, rest get comma every 2 digits
+        let last3 = intPart.slice(-3);
+        let rest = intPart.slice(0, -3);
+
+        if (rest !== "") {
+            rest = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",");
+        }
+
+        let formatted = (rest ? rest + "," : "") + last3 + "." + decPart;
+
+        return `${isSymbolBefore ? symbol + " " : ""}${formatted}`;
     }
+
 
     function getDateString() {
         const today = new Date();
