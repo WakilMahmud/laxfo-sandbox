@@ -163,8 +163,8 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
 
             const reportType = currentRec.getValue({ fieldId: REPORT_TYPE });
             const subsidiary = currentRec.getValue({ fieldId: SUBSIDIARY });
-            const startDate = currentRec.getValue({ fieldId: START_DATE });
-            const statementDate = currentRec.getValue({ fieldId: STATEMENT_DATE });
+            const startDate = formatDateToISODateOnly(currentRec.getValue({ fieldId: START_DATE }));
+            const statementDate = formatDateToISODateOnly(currentRec.getValue({ fieldId: STATEMENT_DATE }));
             const sendEmailReport = currentRec.getValue({ fieldId: SEND_EMAIL_REPORT });
             const sendTo = currentRec.getValue({ fieldId: SEND_TO }).filter(employeeId => Boolean(employeeId));
             const cc = currentRec.getValue({ fieldId: CC }).filter(employeeId => Boolean(employeeId));;
@@ -298,6 +298,17 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
                 message: `An error occurred while generating the report: ${error.message}`
             });
         }
+    }
+
+    function formatDateToISODateOnly(date) {
+        if (!date) return null;
+        const d = new Date(date);
+
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+
+        return `${year}-${month}-${day}`;
     }
 
 

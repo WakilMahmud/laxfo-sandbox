@@ -19,6 +19,7 @@ define([
     const DEFAULT_EMAIL = "farid@dbl-digital.com";
     const CHARGE_COLUMN_TYPES = ['Invoice', 'Customer Refund'];
     const PAYMENT_COLUMN_TYPES = ['Receipt', 'Credit Memo'];
+    const JOURNAL_TYPE = 'Journal';
 
     const EMAIL_REPORT_FOLDER_ID = 1467; // 843
 
@@ -30,8 +31,8 @@ define([
 
             // log.debug('Payload Received', payload);
 
-            const startDate = payload?.startDate ? formatToDDMMYYYY(payload?.startDate) : "";
-            const statementDate = payload.statementDate ? formatToDDMMYYYY(payload.statementDate) : "";
+            const startDate = payload?.startDate ?? "";
+            const statementDate = payload?.statementDate ?? "";
             const willSendEmail = payload.sendEmailReport;
 
             let sendToEmails = payload.sendToEmails;
@@ -44,15 +45,15 @@ define([
 
 
 
-            // log.audit('Script Parameters', {
-            //     startDate,
-            //     statementDate,
-            //     willSendEmail,
-            //     sendToEmails,
-            //     ccEmails,
-            //     bccEmails,
-            //     willSendEmail
-            // });
+            log.audit('Script Parameters', {
+                startDate,
+                statementDate,
+                willSendEmail,
+                sendToEmails,
+                ccEmails,
+                bccEmails,
+                willSendEmail
+            });
 
 
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
@@ -71,7 +72,6 @@ define([
                             charge: statement.values["SUM(fxamount)"] || 0,
                             amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
                             customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
-                            // asmEmail: statement.values["GROUP(custbody_asm_email)"] || "",
                             asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
                             type: statement.values["GROUP(type)"]?.[0]?.text || "",
                         };
@@ -95,7 +95,7 @@ define([
 
             log.debug("ASM Email to PDF File ID Map", asmEmailPdfMap);
 
-            sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail);
+            sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
 
         } catch (error) {
             log.error("Email Report Error", error.toString());
@@ -116,12 +116,13 @@ define([
             const myPagedData = customerReportSearch.runPaged();
             myPagedData.pageRanges.forEach(function (pageRange) {
                 const myPage = myPagedData.fetch({ index: pageRange.index });
+
                 myPage.data.forEach(function (res) {
                     const result = JSON.parse(JSON.stringify(res));
 
-                    log.debug("Search Result Row", result);
+                    // log.debug("Search Result Row", result);
 
-                    const entity = result.values["GROUP(entity)"]?.[0]?.value;
+                    const entity = result.values["GROUP(entity)"]?.[0]?.text;
                     if (!groupedCustomerRecords[entity])
                         groupedCustomerRecords[entity] = [];
                     groupedCustomerRecords[entity].push(result);
@@ -153,23 +154,45 @@ define([
 
             if (startDate) {
                 filteredParsedCustomerStatements = parsedCustomerStatements.filter(row => {
-                    let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
-                    let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
 
-                    const charge = getAbsoluteValue(row.charge);
+                    const rowDate = formatDate(row.date);
 
-                    totalPrevCharge += isChargeColumn ? charge : 0;
-                    totalPrevPayment += isPaymentColumn ? charge : 0;
+                    if (rowDate < startDate) {
+                        const amount = Number(row.charge) || 0; // raw value (can be + or -)
+                        const charge = getAbsoluteValue(amount); // keep using your helper
 
-                    const rowDateISO = new Date(formatDateToISO(row.date));
-                    const startDateISO = new Date(formatDateToISO(startDate));
-                    const statementDateISO = new Date(formatDateToISO(statementDate));
+                        let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
+                        let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
 
-                    if (rowDateISO < startDateISO) {
-                        balanceForward += isChargeColumn ? charge : -charge;
+                        // Journal can be either charge or payment based on sign
+                        if (row.type === JOURNAL_TYPE) {
+                            if (amount >= 0) {
+                                // Positive Journal → Charge column
+                                isChargeColumn = true;
+                                isPaymentColumn = false;
+                            } else if (amount < 0) {
+                                // Negative Journal → Payment column
+                                isChargeColumn = false;
+                                isPaymentColumn = true;
+                            }
+                        }
+
+                        totalPrevCharge += isChargeColumn ? charge : 0;
+                        totalPrevPayment += isPaymentColumn ? charge : 0;
+
+                        // Balance logic stays consistent: charges increase, payments decrease
+                        if (isChargeColumn) {
+                            balanceForward += charge;
+                        } else if (isPaymentColumn) {
+                            balanceForward -= charge;
+                        }
                     }
 
-                    return rowDateISO >= startDateISO && rowDateISO <= statementDateISO;
+                    if (rowDate >= startDate && rowDate <= statementDate) {
+                        return true;
+                    } else {
+                        return false;
+                    }
                 });
             }
 
@@ -276,7 +299,7 @@ define([
                                 </td>
                                 <td class="info-right">
                                     <p class="label">Amount Due</p>
-                                    <p class="amount">${formatCurrency(amountDue, true)}</p>
+                                    <p class="amount">{{AMOUNT_DUE}}</p>
                                 </td>
                             </tr>
                         </table>
@@ -313,16 +336,34 @@ define([
             let balance = balanceForward;
 
             visibleCustomerStatements.forEach(function (row) {
+                const amount = Number(row.charge) || 0; // raw value (can be + or -)
+                const charge = getAbsoluteValue(amount); // keep using your helper
 
                 let isChargeColumn = CHARGE_COLUMN_TYPES.includes(row.type);
                 let isPaymentColumn = PAYMENT_COLUMN_TYPES.includes(row.type);
 
-                const charge = getAbsoluteValue(row.charge);
+                // Journal can be either charge or payment based on sign
+                if (row.type === JOURNAL_TYPE) {
+                    if (amount >= 0) {
+                        // Positive Journal → Charge column
+                        isChargeColumn = true;
+                        isPaymentColumn = false;
+                    } else if (amount < 0) {
+                        // Negative Journal → Payment column
+                        isChargeColumn = false;
+                        isPaymentColumn = true;
+                    }
+                }
 
                 totalCharge += isChargeColumn ? charge : 0;
                 totalPayment += isPaymentColumn ? charge : 0;
 
-                balance += isChargeColumn ? charge : -charge;
+                // Balance logic stays consistent: charges increase, payments decrease
+                if (isChargeColumn) {
+                    balance += charge;
+                } else if (isPaymentColumn) {
+                    balance -= charge;
+                }
 
                 let description = row.type;
                 description += row.description === '- None -' ? "" : ` #${row.description}`;
@@ -359,11 +400,14 @@ define([
                 </body>
              </pdf> `;
 
+            pdfTemplate = pdfTemplate.replace("{{AMOUNT_DUE}}", formatCurrency(balance, true));
+
+
             let pdfRenderer = render.create();
             pdfRenderer.templateContent = pdfTemplate;
 
             let pdfFile = pdfRenderer.renderAsPdf();
-            pdfFile.name = `${customerName}_Customer_Statement_Report_${getDateString()}.pdf`;
+            pdfFile.name = `${customerName}_Customer_Statement_Report_${formatDate(statementDate)}.pdf`;
             pdfFile.folder = EMAIL_REPORT_FOLDER_ID; // Email Reports Folder in file cabinet
 
             const pdfFileId = await pdfFile.save();
@@ -375,10 +419,21 @@ define([
         }
     }
 
-    // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
-    function formatDateToISO(dateStr) {
-        const [day, month, year] = dateStr.split('/');
-        return `${year}-${month}-${day}`;
+    function formatDate(dateString) {
+        if (!dateString) return null;
+
+        // If already YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+            return dateString;
+        }
+
+        // If DD/MM/YYYY
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateString)) {
+            const [day, month, year] = dateString.split('/');
+            return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+        }
+
+        return null;
     }
 
     /**
@@ -401,26 +456,13 @@ define([
         return Math.abs(num);
     }
 
-    function formatToDDMMYYYY(dateStr) {
-        if (!dateStr) return "";
 
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return ""; // invalid date
-
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-
-        return `${day}/${month}/${year}`;
-    }
-
-
-    function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = [], willSendEmail) {
+    function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = [], willSendEmail, statementDate) {
         try {
-            const emailSubject = `Customer Statement Report - ${new Date().toLocaleDateString()}`;
+            const emailSubject = `Customer Statement Report - ${formatDate(statementDate)}`;
 
             const emailBody = `
-                <p>Dear Sir,</p>
+                <p> Dear Sir,</p>
                 <p>Please find the attached Customer Statement Reports.</p>
                 <p>Thank you.</p>
             `;
@@ -508,16 +550,7 @@ define([
 
         let formatted = (rest ? rest + "," : "") + last3 + "." + decPart;
 
-        return `${isSymbolBefore ? symbol + " " : ""}${formatted}`;
-    }
-
-
-    function getDateString() {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, "0");
-        const day = String(today.getDate()).padStart(2, "0");
-        return `${day}/${month}/${year}`;
+        return `${isSymbolBefore ? symbol + " " : ""}${formatted} `;
     }
 
     return {
