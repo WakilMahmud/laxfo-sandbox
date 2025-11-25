@@ -59,6 +59,8 @@ define([
 
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
 
+            const asmEmailWiseCustomerRecords = {};
+
 
             if (customerName) {
                 const customerStatementsList = groupedCustomerRecords[customerName];
@@ -73,15 +75,13 @@ define([
                             customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
                             asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
                             type: statement.values["GROUP(type)"]?.[0]?.text || "",
+                            creditAmount: statement.values["SUM(creditamount)"],
+                            debitAmount: statement.values["SUM(debitamount)"]
                         };
                     }
                 );
 
                 // log.debug("Parsed Customer Statements for Single Customer: " + customerName, parsedCustomerStatements);
-
-                for (const stmt of parsedCustomerStatements) {
-                    log.debug("Statement Row", stmt);
-                }
 
                 let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
 
@@ -115,24 +115,58 @@ define([
                                 customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
                                 asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
                                 type: statement.values["GROUP(type)"]?.[0]?.text || "",
+                                creditAmount: statement.values["SUM(creditamount)"],
+                                debitAmount: statement.values["SUM(debitamount)"]
                             };
                         }
                     );
 
                     // log.debug("Parsed Customer Statements for Customer: " + customer, parsedCustomerStatements);
 
-                    let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
 
-                    if (asmEmail === "- None -" || !asmEmail) {
-                        asmEmail = DEFAULT_EMAIL;
+                    for (const statement of parsedCustomerStatements) {
+                        // log.debug("Statement Row", statement);
+
+                        if (statement.type === "Invoice") {
+                            const statmentAsmEmail = statement.asmEmail;
+
+                            if (!asmEmailWiseCustomerRecords[statmentAsmEmail]) {
+                                asmEmailWiseCustomerRecords[statmentAsmEmail] = [];
+                            }
+
+                            asmEmailWiseCustomerRecords[statmentAsmEmail].push(parsedCustomerStatements);
+
+                            break;
+                        }
+
                     }
 
-                    if (!asmEmailPdfMap[asmEmail]) {
-                        asmEmailPdfMap[asmEmail] = [];
+                    for (const customerAsmEmail in asmEmailWiseCustomerRecords) {
+
+                        if (sendToEmails.includes(customerAsmEmail)) {
+                            const customerStatements = asmEmailWiseCustomerRecords[customerAsmEmail];
+                            log.debug("Generating PDF for ASM Email: " + customerAsmEmail, customerStatements);
+
+                            for (const parsedCustomerStatements of customerStatements) {
+
+                                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
+
+                                if (asmEmail === "- None -" || !asmEmail) {
+                                    asmEmail = DEFAULT_EMAIL;
+                                }
+
+                                if (!asmEmailPdfMap[asmEmail]) {
+                                    asmEmailPdfMap[asmEmail] = [];
+                                }
+
+                                asmEmailPdfMap[asmEmail].push(pdfFileId);
+                            }
+                        }
                     }
 
-                    asmEmailPdfMap[asmEmail].push(pdfFileId);
                 }
+
+                log.debug("ASM Email Wise Customer Statements Map", asmEmailWiseCustomerRecords);
 
                 log.debug("ASM Email to PDF File ID Map (All Customer)", asmEmailPdfMap);
 
@@ -164,7 +198,7 @@ define([
                 myPage.data.forEach(function (res) {
                     const result = JSON.parse(JSON.stringify(res));
 
-                    log.debug("Search Result Row", result);
+                    // log.debug("Search Result Row", result);
 
                     const entity = result.values["GROUP(entity)"]?.[0]?.text;
                     if (!groupedCustomerRecords[entity])
@@ -185,7 +219,7 @@ define([
         try {
             const customerName = escapeXML(parsedCustomerStatements[0].entity);
             const customerBillAddress = escapeXML(parsedCustomerStatements[0].customerBillAddress);
-            const amountDue = formatNumber(parsedCustomerStatements[0].amountDue);
+            let amountDue = "";
             let asmEmail = "";
 
             let visibleCustomerStatements = parsedCustomerStatements;
@@ -210,25 +244,30 @@ define([
 
                         // Journal can be either charge or payment based on sign
                         if (row.type === JOURNAL_TYPE) {
-                            if (amount >= 0) {
-                                // Positive Journal → Charge column
-                                isChargeColumn = true;
-                                isPaymentColumn = false;
-                            } else if (amount < 0) {
-                                // Negative Journal → Payment column
-                                isChargeColumn = false;
-                                isPaymentColumn = true;
+
+                            const debit = row.debitAmount;
+                            const credit = row.creditAmount;
+
+                            if (debit) {
+                                totalPrevCharge += debit;
+                                balanceForward += debit;
                             }
-                        }
 
-                        totalPrevCharge += isChargeColumn ? charge : 0;
-                        totalPrevPayment += isPaymentColumn ? charge : 0;
+                            if (credit) {
+                                totalPrevPayment += credit;
+                                balanceForward -= credit;
+                            }
 
-                        // Balance logic stays consistent: charges increase, payments decrease
-                        if (isChargeColumn) {
-                            balanceForward += charge;
-                        } else if (isPaymentColumn) {
-                            balanceForward -= charge;
+                        } else {
+                            totalPrevCharge += isChargeColumn ? charge : 0;
+                            totalPrevPayment += isPaymentColumn ? charge : 0;
+
+                            // Balance logic stays consistent: charges increase, payments decrease
+                            if (isChargeColumn) {
+                                balanceForward += charge;
+                            } else if (isPaymentColumn) {
+                                balanceForward -= charge;
+                            }
                         }
                     }
 
@@ -388,25 +427,19 @@ define([
 
                 // Journal can be either charge or payment based on sign
                 if (row.type === JOURNAL_TYPE) {
-                    if (amount >= 0) {
-                        // Positive Journal → Charge column
-                        isChargeColumn = true;
-                        isPaymentColumn = false;
-                    } else if (amount < 0) {
-                        // Negative Journal → Payment column
-                        isChargeColumn = false;
-                        isPaymentColumn = true;
+                    totalCharge += row.debitAmount;
+                    totalPayment += row.creditAmount;
+                    balance += row.debitAmount - row.creditAmount;
+                } else {
+                    totalCharge += isChargeColumn ? charge : 0;
+                    totalPayment += isPaymentColumn ? charge : 0;
+
+                    // Balance logic stays consistent: charges increase, payments decrease
+                    if (isChargeColumn) {
+                        balance += charge;
+                    } else if (isPaymentColumn) {
+                        balance -= charge;
                     }
-                }
-
-                totalCharge += isChargeColumn ? charge : 0;
-                totalPayment += isPaymentColumn ? charge : 0;
-
-                // Balance logic stays consistent: charges increase, payments decrease
-                if (isChargeColumn) {
-                    balance += charge;
-                } else if (isPaymentColumn) {
-                    balance -= charge;
                 }
 
                 let description = row.type;
@@ -414,15 +447,17 @@ define([
 
                 if (!asmEmail && row.type === 'Invoice' && row.asmEmail !== '- None -') {
                     asmEmail = row.asmEmail;
+                    amountDue = formatNumber(row.amountDue);
                 }
+
 
 
                 pdfTemplate += `
                 <tr>
                     <td>${row.date}</td>
                     <td>${description}</td>
-                    <td class="number">${isChargeColumn ? formatCurrency(charge) : ""}</td>
-                    <td class="number">${isPaymentColumn ? formatCurrency(charge) : ""}</td>
+                    <td class="number">${row.type === JOURNAL_TYPE ? row.debitAmount : isChargeColumn ? formatCurrency(charge) : ""}</td>
+                    <td class="number">${row.type === JOURNAL_TYPE ? row.creditAmount : isPaymentColumn ? formatCurrency(charge) : ""}</td>
                     <td class="number">${formatCurrency(balance)}</td>
                 </tr> `;
             });

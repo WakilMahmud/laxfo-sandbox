@@ -180,7 +180,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
                 return;
             }
 
-            if (!customerName) {
+            if (!customerName && sendTo.length === 0) {
                 dialog.alert({
                     title: 'Alert',
                     message: 'Please select a Customer.'
