@@ -16,6 +16,8 @@ define([
     const PARAM_PAYLOAD = 'custscript_customer_statement';
 
     const asmEmailPdfMap = {};
+    const asmEmailWiseCustomerRecords = {};
+
     const DEFAULT_EMAIL = "farid@dbl-digital.com";
     const CHARGE_COLUMN_TYPES = ['Invoice', 'Customer Refund'];
     const PAYMENT_COLUMN_TYPES = ['Receipt', 'Credit Memo'];
@@ -45,8 +47,6 @@ define([
             ccEmails = ccEmails.filter(email => Boolean(email));
             bccEmails = bccEmails.filter(email => Boolean(email));
 
-
-
             log.audit('Script Parameters', {
                 startDate,
                 statementDate,
@@ -56,121 +56,51 @@ define([
                 bccEmails
             });
 
-
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
-
-            const asmEmailWiseCustomerRecords = {};
-
 
             if (customerName) {
                 const customerStatementsList = groupedCustomerRecords[customerName];
-                const parsedCustomerStatements = customerStatementsList.map(
-                    (statement) => {
-                        return {
-                            entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
-                            date: statement.values["GROUP(trandate)"] || "",
-                            description: statement.values["GROUP(tranid)"] || "",
-                            charge: statement.values["SUM(fxamount)"] || 0,
-                            amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
-                            customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
-                            asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
-                            type: statement.values["GROUP(type)"]?.[0]?.text || "",
-                            creditAmount: statement.values["SUM(creditamount)"],
-                            debitAmount: statement.values["SUM(debitamount)"]
-                        };
-                    }
-                );
-
+                const parsedCustomerStatements = parseCustomerStatements(customerStatementsList);
                 // log.debug("Parsed Customer Statements for Single Customer: " + customerName, parsedCustomerStatements);
 
-                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
-
-                if (asmEmail === "- None -" || !asmEmail) {
-                    asmEmail = DEFAULT_EMAIL;
-                }
-
-                if (!asmEmailPdfMap[asmEmail]) {
-                    asmEmailPdfMap[asmEmail] = [];
-                }
-
-                asmEmailPdfMap[asmEmail].push(pdfFileId);
+                await generatePdfAndBuildAsmEmailMap(parsedCustomerStatements, startDate, statementDate, willSendEmail);
 
                 log.debug("ASM Email to PDF File ID Map (Single Customer)", asmEmailPdfMap);
 
-                sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
+                sendEmailReport(sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
 
             } else {
+                // Process all customers
                 for (const customer in groupedCustomerRecords) {
                     const customerStatementsList = groupedCustomerRecords[customer];
                     // log.debug("Customer Statement List for Company ID: " + customer, customerStatementsList);
 
-                    const parsedCustomerStatements = customerStatementsList.map(
-                        (statement) => {
-                            return {
-                                entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
-                                date: statement.values["GROUP(trandate)"] || "",
-                                description: statement.values["GROUP(tranid)"] || "",
-                                charge: statement.values["SUM(fxamount)"] || 0,
-                                amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
-                                customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
-                                asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
-                                type: statement.values["GROUP(type)"]?.[0]?.text || "",
-                                creditAmount: statement.values["SUM(creditamount)"],
-                                debitAmount: statement.values["SUM(debitamount)"]
-                            };
-                        }
-                    );
+                    const parsedCustomerStatements = parseCustomerStatements(customerStatementsList);
 
                     // log.debug("Parsed Customer Statements for Customer: " + customer, parsedCustomerStatements);
 
+                    groupCustomerStatementsByAsmEmail(parsedCustomerStatements);
 
-                    for (const statement of parsedCustomerStatements) {
-                        // log.debug("Statement Row", statement);
 
-                        if (statement.type === "Invoice") {
-                            const statmentAsmEmail = statement.asmEmail;
-
-                            if (!asmEmailWiseCustomerRecords[statmentAsmEmail]) {
-                                asmEmailWiseCustomerRecords[statmentAsmEmail] = [];
-                            }
-
-                            asmEmailWiseCustomerRecords[statmentAsmEmail].push(parsedCustomerStatements);
-
-                            break;
-                        }
-
-                    }
-
+                    // Generate PDF for selected Send To ASM Email only
                     for (const customerAsmEmail in asmEmailWiseCustomerRecords) {
 
                         if (sendToEmails.includes(customerAsmEmail)) {
                             const customerStatements = asmEmailWiseCustomerRecords[customerAsmEmail];
-                            log.debug("Generating PDF for ASM Email: " + customerAsmEmail, customerStatements);
+                            // log.debug("Generating PDF for ASM Email: " + customerAsmEmail, customerStatements);
 
                             for (const parsedCustomerStatements of customerStatements) {
-
-                                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
-
-                                if (asmEmail === "- None -" || !asmEmail) {
-                                    asmEmail = DEFAULT_EMAIL;
-                                }
-
-                                if (!asmEmailPdfMap[asmEmail]) {
-                                    asmEmailPdfMap[asmEmail] = [];
-                                }
-
-                                asmEmailPdfMap[asmEmail].push(pdfFileId);
+                                await generatePdfAndBuildAsmEmailMap(parsedCustomerStatements, startDate, statementDate, willSendEmail)
                             }
                         }
                     }
-
                 }
 
                 log.debug("ASM Email Wise Customer Statements Map", asmEmailWiseCustomerRecords);
 
                 log.debug("ASM Email to PDF File ID Map (All Customer)", asmEmailPdfMap);
 
-                sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
+                sendEmailReport(sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
             }
 
 
@@ -178,6 +108,59 @@ define([
         } catch (error) {
             log.error("Email Report Error", error.toString());
         }
+    }
+
+    function groupCustomerStatementsByAsmEmail(parsedCustomerStatements) {
+        for (const statement of parsedCustomerStatements) {
+            // log.debug("Statement Row", statement);
+
+            if (statement.type === "Invoice") {
+                const statmentAsmEmail = statement.asmEmail;
+
+                if (!asmEmailWiseCustomerRecords[statmentAsmEmail]) {
+                    asmEmailWiseCustomerRecords[statmentAsmEmail] = [];
+                }
+
+                asmEmailWiseCustomerRecords[statmentAsmEmail].push(parsedCustomerStatements);
+                break;
+            }
+        }
+    }
+
+    function parseCustomerStatements(customerStatementsList) {
+        const parsedCustomerStatements = customerStatementsList.map(
+            (statement) => {
+                return {
+                    entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
+                    date: statement.values["GROUP(trandate)"] || "",
+                    description: statement.values["GROUP(tranid)"] || "",
+                    charge: statement.values["SUM(fxamount)"] || 0,
+                    amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
+                    customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
+                    asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
+                    type: statement.values["GROUP(type)"]?.[0]?.text || "",
+                    creditAmount: statement.values["SUM(creditamount)"],
+                    debitAmount: statement.values["SUM(debitamount)"]
+                };
+            }
+        );
+
+        return parsedCustomerStatements;
+    }
+
+
+    async function generatePdfAndBuildAsmEmailMap(parsedCustomerStatements, startDate, statementDate, willSendEmail) {
+        let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
+
+        if (asmEmail === "- None -" || !asmEmail) {
+            asmEmail = DEFAULT_EMAIL;
+        }
+
+        if (!asmEmailPdfMap[asmEmail]) {
+            asmEmailPdfMap[asmEmail] = [];
+        }
+
+        asmEmailPdfMap[asmEmail].push(pdfFileId);
     }
 
     /**
@@ -537,7 +520,7 @@ define([
     }
 
 
-    function sendEmailReport(asmEmailPdfMap, paramEmailTo = [], paramEmailCc = [], paramEmailBcc = [], willSendEmail, statementDate) {
+    function sendEmailReport(paramEmailTo = [], paramEmailCc = [], paramEmailBcc = [], willSendEmail, statementDate) {
         try {
             const emailSubject = `Customer Statement Report - ${formatDate(statementDate)}`;
 
