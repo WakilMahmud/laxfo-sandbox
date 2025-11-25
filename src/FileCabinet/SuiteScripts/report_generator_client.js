@@ -8,6 +8,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
 
     const REPORT_TYPE = 'custrecord_report_type';
     const SUBSIDIARY = 'custrecord_subsidiary';
+    const CUSTOMER_NAME = 'custrecord_customer';
     const START_DATE = 'custrecord_start_date';
     const STATEMENT_DATE = 'custrecord_statement_date';
     const SEND_EMAIL_REPORT = 'custrecord_send_email_report';
@@ -163,6 +164,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
 
             const reportType = currentRec.getValue({ fieldId: REPORT_TYPE });
             const subsidiary = currentRec.getValue({ fieldId: SUBSIDIARY });
+            const customerName = currentRec.getText({ fieldId: CUSTOMER_NAME });
             const startDate = formatDateToISODateOnly(currentRec.getValue({ fieldId: START_DATE }));
             const statementDate = formatDateToISODateOnly(currentRec.getValue({ fieldId: STATEMENT_DATE }));
             const sendEmailReport = currentRec.getValue({ fieldId: SEND_EMAIL_REPORT });
@@ -174,6 +176,22 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
                 dialog.alert({
                     title: 'Alert',
                     message: 'Please select a Report Type.'
+                });
+                return;
+            }
+
+            if (!customerName) {
+                dialog.alert({
+                    title: 'Alert',
+                    message: 'Please select a Customer.'
+                });
+                return;
+            }
+
+            if (startDate && startDate > statementDate) {
+                dialog.alert({
+                    title: 'Alert',
+                    message: 'Start Date cannot be later than Statement Date'
                 });
                 return;
             }
@@ -232,6 +250,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
             console.log('Generating report with parameters:', {
                 reportType,
                 subsidiary,
+                customerName,
                 startDate,
                 statementDate,
                 sendEmailReport,
@@ -246,6 +265,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
             const payload = {
                 reportType,
                 subsidiary,
+                customerName,
                 startDate,
                 statementDate,
                 sendEmailReport,

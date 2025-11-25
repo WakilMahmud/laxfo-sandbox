@@ -31,6 +31,8 @@ define([
 
             // log.debug('Payload Received', payload);
 
+
+            const customerName = payload?.customerName ?? "";
             const startDate = payload?.startDate ?? "";
             const statementDate = payload?.statementDate ?? "";
             const willSendEmail = payload.sendEmailReport;
@@ -51,18 +53,15 @@ define([
                 willSendEmail,
                 sendToEmails,
                 ccEmails,
-                bccEmails,
-                willSendEmail
+                bccEmails
             });
 
 
             const groupedCustomerRecords = getGroupWiseCustmerRecords();
 
 
-            for (const companyId in groupedCustomerRecords) {
-                const customerStatementsList = groupedCustomerRecords[companyId];
-                // log.debug("Customer Statement List for Company ID: " + companyId, customerStatementsList);
-
+            if (customerName) {
+                const customerStatementsList = groupedCustomerRecords[customerName];
                 const parsedCustomerStatements = customerStatementsList.map(
                     (statement) => {
                         return {
@@ -78,9 +77,13 @@ define([
                     }
                 );
 
-                // log.debug("Parsed Customer Statements for Company ID: " + companyId, parsedCustomerStatements);
+                // log.debug("Parsed Customer Statements for Single Customer: " + customerName, parsedCustomerStatements);
 
-                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate) || {};
+                for (const stmt of parsedCustomerStatements) {
+                    log.debug("Statement Row", stmt);
+                }
+
+                let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
 
                 if (asmEmail === "- None -" || !asmEmail) {
                     asmEmail = DEFAULT_EMAIL;
@@ -91,11 +94,52 @@ define([
                 }
 
                 asmEmailPdfMap[asmEmail].push(pdfFileId);
+
+                log.debug("ASM Email to PDF File ID Map (Single Customer)", asmEmailPdfMap);
+
+                sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
+
+            } else {
+                for (const customer in groupedCustomerRecords) {
+                    const customerStatementsList = groupedCustomerRecords[customer];
+                    // log.debug("Customer Statement List for Company ID: " + customer, customerStatementsList);
+
+                    const parsedCustomerStatements = customerStatementsList.map(
+                        (statement) => {
+                            return {
+                                entity: statement.values["GROUP(entity)"]?.[0]?.text || "",
+                                date: statement.values["GROUP(trandate)"] || "",
+                                description: statement.values["GROUP(tranid)"] || "",
+                                charge: statement.values["SUM(fxamount)"] || 0,
+                                amountDue: statement.values["SUM(customer.fxbalance)"] || 0,
+                                customerBillAddress: statement.values["GROUP(customer.billaddress)"] || "",
+                                asmEmail: statement.values["GROUP(customer.custentity_asm_email)"] || "",
+                                type: statement.values["GROUP(type)"]?.[0]?.text || "",
+                            };
+                        }
+                    );
+
+                    // log.debug("Parsed Customer Statements for Customer: " + customer, parsedCustomerStatements);
+
+                    let { asmEmail, pdfFileId } = await generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) || {};
+
+                    if (asmEmail === "- None -" || !asmEmail) {
+                        asmEmail = DEFAULT_EMAIL;
+                    }
+
+                    if (!asmEmailPdfMap[asmEmail]) {
+                        asmEmailPdfMap[asmEmail] = [];
+                    }
+
+                    asmEmailPdfMap[asmEmail].push(pdfFileId);
+                }
+
+                log.debug("ASM Email to PDF File ID Map (All Customer)", asmEmailPdfMap);
+
+                sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
             }
 
-            log.debug("ASM Email to PDF File ID Map", asmEmailPdfMap);
 
-            sendEmailReport(asmEmailPdfMap, sendToEmails, ccEmails, bccEmails, willSendEmail, statementDate);
 
         } catch (error) {
             log.error("Email Report Error", error.toString());
@@ -120,7 +164,7 @@ define([
                 myPage.data.forEach(function (res) {
                     const result = JSON.parse(JSON.stringify(res));
 
-                    // log.debug("Search Result Row", result);
+                    log.debug("Search Result Row", result);
 
                     const entity = result.values["GROUP(entity)"]?.[0]?.text;
                     if (!groupedCustomerRecords[entity])
@@ -137,7 +181,7 @@ define([
         }
     }
 
-    async function generatePDFReport(parsedCustomerStatements, startDate, statementDate) {
+    async function generatePDFReport(parsedCustomerStatements, startDate, statementDate, willSendEmail) {
         try {
             const customerName = escapeXML(parsedCustomerStatements[0].entity);
             const customerBillAddress = escapeXML(parsedCustomerStatements[0].customerBillAddress);
@@ -396,6 +440,7 @@ define([
 
                 <div class="footer">
                     <p>This report was automatically generated by NetSuite.</p>
+                    <h1>${willSendEmail ? "" : `From the beginning to today => Amount Due = ${formatCurrency(amountDue, true)}`}</h1>
                 </div>
                 </body>
              </pdf> `;
