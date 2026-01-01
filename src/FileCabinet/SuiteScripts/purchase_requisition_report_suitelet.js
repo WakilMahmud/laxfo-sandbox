@@ -119,6 +119,15 @@ define(['N/record', 'N/render'], (record, render) => {
                             <td style="width: 90%;" align="center">
                                 <p style="font-size: 16pt; font-weight: bold; margin:0">EUDB ACCESSORIES LIMITED</p>
                             </td>
+                            <td class="company-block">
+                                <p class="company-name">EUDB Accessories Limited</p>
+                                <p class="company-address">
+                                    BGMEA Complex, West Tower, Floor 11,<br/>
+                                    House #77/A, Block #H-1, Uttara Sector 17<br/>
+                                    Dhaka 1230<br/>
+                                    Bangladesh
+                                </p>
+                            </td>
                         </tr>
                     </table>
 
