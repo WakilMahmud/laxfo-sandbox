@@ -1,0 +1,290 @@
+const parsedCustomerStatements = [
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "28/4/2025",
+        "description": "INV-000000078",
+        "charge": "100.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "17/6/2025",
+        "description": "INV-000000090",
+        "charge": "50.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "17/6/2025",
+        "description": "INV-000000091",
+        "charge": "2.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "17/6/2025",
+        "description": "INV-000000093",
+        "charge": "12.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "17/10/2025",
+        "description": "INV-000000107",
+        "charge": "15.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "17/10/2025",
+        "description": "INV-000000108",
+        "charge": "105.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "10/11/2025",
+        "description": "INV-000000113",
+        "charge": "10.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "10/11/2025",
+        "description": "INV-000000117",
+        "charge": "502.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    },
+    {
+        "entity": "1 LAXFO Electronics Limited",
+        "date": "10/11/2025",
+        "description": "INV-000000120",
+        "charge": "15000.00",
+        "amountDue": "15796.00",
+        "customerBillAddress": "- None -",
+        "asmEmail": "- None -",
+        "type": "Invoice"
+    }
+];
+
+ function formatDateToISO(dateStr) {
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month}-${day}`;
+}
+
+const startDate = "17/10/2025";
+const statementDate = "17/10/2025";
+
+const filteredParsedCustomerStatements = parsedCustomerStatements.filter(row => {
+                    const rowDateISO = new Date(formatDateToISO(row.date));
+                    const startDateISO = new Date(formatDateToISO(startDate));
+                    const statementDateISO = new Date(formatDateToISO(statementDate));
+
+                    // console.log("Date Comparison", {
+                    //     rowDate: row.date,
+                    //     rowDateISO,
+                    //     startDate,
+                    //     startDateISO,
+                    // });
+
+                    if (rowDateISO >= startDateISO && rowDateISO <= statementDateISO) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+                
+console.log(filteredParsedCustomerStatements);
+
+
+
+
+// ============ Ahanaf Traders ===================
+
+[
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "",
+                    "text": "- None -"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "JR-0000000044",
+            "SUM(fxamount)": ".00",
+            "SUM(customer.fxbalance)": ".00",
+            "GROUP(customer.billaddress)": "- None -",
+            "GROUP(customer.custentity_asm_email)": "- None -",
+            "GROUP(type)": [
+                {
+                    "value": "Journal",
+                    "text": "Journal"
+                }
+            ]
+        }
+    },
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "",
+                    "text": "- None -"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "JR-0000000045",
+            "SUM(fxamount)": ".00",
+            "SUM(customer.fxbalance)": ".00",
+            "GROUP(customer.billaddress)": "- None -",
+            "GROUP(customer.custentity_asm_email)": "- None -",
+            "GROUP(type)": [
+                {
+                    "value": "Journal",
+                    "text": "Journal"
+                }
+            ]
+        }
+    },
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "644",
+                    "text": "81 112001 Ahanaf Traders"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "5",
+            "SUM(fxamount)": "-1200.00",
+            "SUM(customer.fxbalance)": "-2710.00",
+            "GROUP(customer.billaddress)": "Dhaka\n112001 Ahanaf Traders\nMoyeen Centre, House No. 9B, Level – 02, Road No.\nDhaka\nDhaka 1212\nBangladesh",
+            "GROUP(customer.custentity_asm_email)": "farid@dbl-digital.com",
+            "GROUP(type)": [
+                {
+                    "value": "CustCred",
+                    "text": "Credit Memo"
+                }
+            ]
+        }
+    },
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "644",
+                    "text": "81 112001 Ahanaf Traders"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "INV-000000146",
+            "SUM(fxamount)": "4500.00",
+            "SUM(customer.fxbalance)": "-2710.00",
+            "GROUP(customer.billaddress)": "Dhaka\n112001 Ahanaf Traders\nMoyeen Centre, House No. 9B, Level – 02, Road No.\nDhaka\nDhaka 1212\nBangladesh",
+            "GROUP(customer.custentity_asm_email)": "farid@dbl-digital.com",
+            "GROUP(type)": [
+                {
+                    "value": "CustInvc",
+                    "text": "Invoice"
+                }
+            ]
+        }
+    },
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "",
+                    "text": "81 112001 Ahanaf Traders"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "JR-0000000046",
+            "SUM(fxamount)": ".00",
+            "SUM(customer.fxbalance)": "-5420.00",
+            "GROUP(customer.billaddress)": "Dhaka\n112001 Ahanaf Traders\nMoyeen Centre, House No. 9B, Level – 02, Road No.\nDhaka\nDhaka 1212\nBangladesh",
+            "GROUP(customer.custentity_asm_email)": "farid@dbl-digital.com",
+            "GROUP(type)": [
+                {
+                    "value": "Journal",
+                    "text": "Journal"
+                }
+            ]
+        }
+    },
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "",
+                    "text": "81 112001 Ahanaf Traders"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "JR-0000000047",
+            "SUM(fxamount)": ".00",
+            "SUM(customer.fxbalance)": "-5420.00",
+            "GROUP(customer.billaddress)": "Dhaka\n112001 Ahanaf Traders\nMoyeen Centre, House No. 9B, Level – 02, Road No.\nDhaka\nDhaka 1212\nBangladesh",
+            "GROUP(customer.custentity_asm_email)": "farid@dbl-digital.com",
+            "GROUP(type)": [
+                {
+                    "value": "Journal",
+                    "text": "Journal"
+                }
+            ]
+        }
+    },
+    {
+        "values": {
+            "GROUP(entity)": [
+                {
+                    "value": "644",
+                    "text": "81 112001 Ahanaf Traders"
+                }
+            ],
+            "GROUP(trandate)": "24/11/2025",
+            "GROUP(memomain)": "- None -",
+            "GROUP(tranid)": "PY-0000000060",
+            "SUM(fxamount)": "2000.00",
+            "SUM(customer.fxbalance)": "-2710.00",
+            "GROUP(customer.billaddress)": "Dhaka\n112001 Ahanaf Traders\nMoyeen Centre, House No. 9B, Level – 02, Road No.\nDhaka\nDhaka 1212\nBangladesh",
+            "GROUP(customer.custentity_asm_email)": "farid@dbl-digital.com",
+            "GROUP(type)": [
+                {
+                    "value": "CustPymt",
+                    "text": "Receipt"
+                }
+            ]
+        }
+    }
+]

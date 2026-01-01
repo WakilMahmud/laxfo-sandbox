@@ -145,12 +145,43 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
     }
 
 
-
     function fieldChanged(context) {
-        const currentRec = context.currentRecord;
+        const currentRecord = context.currentRecord;
         const fieldId = context.fieldId;
 
+
         try {
+
+            if (fieldId === CUSTOMER_NAME) {
+                const customerName = currentRecord.getText({ fieldId: CUSTOMER_NAME });
+
+                if (customerName) {
+                    currentRecord.setValue({
+                        fieldId: SEND_EMAIL_REPORT,
+                        value: false,
+                        ignoreFieldChange: true
+                    });
+
+                    currentRecord.setValue({
+                        fieldId: SEND_TO,
+                        value: [],
+                        ignoreFieldChange: true
+                    });
+
+                    currentRecord.setValue({
+                        fieldId: CC,
+                        value: [],
+                        ignoreFieldChange: true
+                    });
+
+                    currentRecord.setValue({
+                        fieldId: BCC,
+                        value: [],
+                        ignoreFieldChange: true
+                    });
+
+                }
+            }
 
         } catch (e) {
             console.error('Field Changed Error', e);
@@ -169,21 +200,14 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
             const statementDate = formatDateToISODateOnly(currentRec.getValue({ fieldId: STATEMENT_DATE }));
             const sendEmailReport = currentRec.getValue({ fieldId: SEND_EMAIL_REPORT });
             const sendTo = currentRec.getValue({ fieldId: SEND_TO }).filter(employeeId => Boolean(employeeId));
-            const cc = currentRec.getValue({ fieldId: CC }).filter(employeeId => Boolean(employeeId));;
-            const bcc = currentRec.getValue({ fieldId: BCC }).filter(employeeId => Boolean(employeeId));;
+            const cc = currentRec.getValue({ fieldId: CC }).filter(employeeId => Boolean(employeeId));
+            const bcc = currentRec.getValue({ fieldId: BCC }).filter(employeeId => Boolean(employeeId));
+
 
             if (!reportType) {
                 dialog.alert({
                     title: 'Alert',
                     message: 'Please select a Report Type.'
-                });
-                return;
-            }
-
-            if (!customerName && sendTo.length === 0) {
-                dialog.alert({
-                    title: 'Alert',
-                    message: 'Please select a Customer.'
                 });
                 return;
             }
@@ -196,13 +220,41 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
                 return;
             }
 
-            if (sendEmailReport && sendTo.length === 0) {
+            if (!customerName && sendEmailReport && sendTo.length === 0) {
                 dialog.alert({
                     title: 'Alert',
                     message: 'Please select at least one recipient in the Send To field to send email reports.'
                 });
                 return;
             }
+
+            if (!customerName && !sendEmailReport && sendTo.length === 0) {
+                dialog.alert({
+                    title: 'Alert',
+                    message: 'Please select customer report to generate reports in the system.'
+                });
+                return;
+            }
+
+            if (customerName && sendEmailReport) {
+                dialog.alert({
+                    title: 'Alert',
+                    message: 'Cannot select a specific customer when sending email reports. Please clear the Check Customer Report field.'
+                });
+                return;
+            }
+
+            if (customerName && !sendEmailReport && sendTo.length > 0) {
+                dialog.alert({
+                    title: 'Alert',
+                    message: 'Cannot select recipients in the Send To field when generating customer reports in the system. Please clear the Send To field.'
+                });
+                return;
+            }
+
+
+
+
 
             const sendToEmails = [];
             const ccEmails = [];
@@ -294,7 +346,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
 
             if (sendEmailReport) {
                 showLoadingIndicator('Generating and sending reports via email');
-                await delay(5000);
+                await delay(10000);
                 hideLoadingIndicator();
 
                 dialog.alert({
@@ -303,7 +355,7 @@ define(["N/search", "N/ui/dialog", "N/currentRecord", "N/url"], function (search
                 });
             } else {
                 showLoadingIndicator('Generating reports');
-                await delay(2000);
+                await delay(10000);
                 hideLoadingIndicator();
 
                 dialog.alert({
