@@ -82,23 +82,26 @@ define(['N/record', 'N/render'], (record, render) => {
                     width: 50%;
                 }
 
+                .item-table{
+                    margin-top: 20px;
+                }
+
                 .item-table th {
-                    border: 1px solid #000;
                     font-weight: bold;
-                    background-color: #eaeaea;
-                    text-align: center;
+                    background-color: #e6e6e6;
                     font-size: 10px;
                 }
 
                 .item-table td, th {
-                    border: 1px solid #000;
+                    border: 0.5px solid #ffffffff;
                     text-align: center;
                 }
+
 
                 .signature-table td {
                     width: 50%;
                     text-align: center;
-                    padding-top: 60px;
+                    padding-top: 300px;
                     margin-left: 100px;
                 }
                 .signature-label {
@@ -109,36 +112,93 @@ define(['N/record', 'N/render'], (record, render) => {
                 }
             </style>
             </head>
-               
                 <body>
-                    <table style="width: 100%; margin-bottom: 20px;">
+                    <table>
                         <tr>
-                            <td style="width: 10%;" align="left">
-                                <img src="${companyLogo}" width="70" height="70" />
+                            <td style="width: 50%; margin:0; vertical-align: top;">
+                                <table style="width: 100%;">
+                                    <tr>
+                                        <td style="width: 25%;" align="left">
+                                            <img src="${companyLogo}" width="70" height="70" />
+                                        </td>
+                                        <td>
+                                            EUDB Accessories Limited <br />
+                                            BGMEA Complex, West Tower, Floor 11,<br/>
+                                            House #77/A, Block #H-1, Uttara Sector 17<br/>
+                                            Dhaka 1230 <br/>
+                                            Bangladesh
+                                        </td>
+                                    </tr>
+                                </table>
                             </td>
-                            <td style="width: 90%;" align="center">
-                                <p style="font-size: 16pt; font-weight: bold; margin:0">EUDB ACCESSORIES LIMITED</p>
-                            </td>
-                            <td class="company-block">
-                                <p class="company-name">EUDB Accessories Limited</p>
-                                <p class="company-address">
-                                    BGMEA Complex, West Tower, Floor 11,<br/>
-                                    House #77/A, Block #H-1, Uttara Sector 17<br/>
-                                    Dhaka 1230<br/>
-                                    Bangladesh
-                                </p>
+                            
+                            <td style="width: 50%; vertical-align: top; text-align: right;">
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    <tr>
+                                    <td>
+                                        <p style="
+                                            width: 100%;
+                                            text-align: right;
+                                            font-size: 14pt;
+                                            font-weight: bold;
+                                            font-style: italic;
+                                            margin: 0;"
+                                        >
+                                            Purchase Requisition
+                                        </p>
+
+                                        <p style="
+                                            width: 100%;
+                                            text-align: right;
+                                            font-size: 12pt;
+                                            margin: 6px 0 0 0;"
+                                        >
+                                            #${requistionNumber}
+                                        </p>
+
+                                        <p style="
+                                            width: 100%;
+                                            text-align: right;
+                                            font-size: 8pt;
+                                            margin-top: 4px;"
+                                        >
+                                            ${escapeXml(date)}
+                                        </p>
+
+                                        <p style="
+                                            width: 100%;
+                                            background: #e6e6e6;
+                                            text-align: center;
+                                            font-style: italic;
+                                            font-size: 9pt;
+                                            padding: 6px 0 3px 0;
+                                            margin: 6px 0 0 80px;"
+                                        >
+                                            Requested Department
+                                        </p>
+
+                                        <p style="
+                                            width: 100%;
+                                            background: #e6e6e6;
+                                            text-align: center;
+                                            font-style: italic;
+                                            font-weight: bold;
+                                            font-size: 9pt;
+                                            padding: 6px 0 3px 0;
+                                            margin: 6px 0 0 80px;"
+                                        >
+                                            Production
+                                        </p>
+                                    </td>
+                                    </tr>
+
+                                </table>
                             </td>
                         </tr>
                     </table>
+                
+                
 
-
-                    <h2 style="text-align: center; text-decoration: underline; margin-bottom: 20px;">PURCHASE REQUISITION REPORT</h2>
-
-                    <table class="info-table" style="margin-bottom: 20px;">
-                        <tr>
-                            <td><strong>Date:</strong> ${escapeXml(date)}</td>
-                        </tr>
-                    </table>
 
                     <table class="item-table">
                         <thead>
@@ -176,9 +236,11 @@ define(['N/record', 'N/render'], (record, render) => {
                         </thead>
                         <tbody>
                             ${tableRows}
-                            <tr>
-                                <td colspan="5" style="text-align: right; font-weight: bold;">TOTAL</td>
-                                <td style="text-align: center; font-weight: bold;">${totalQuantity}</td>
+
+                            <tr style="border: 1px solid #e6e6e6;"></tr>
+                            <tr style="margin-top: 8px;">
+                                <td colspan="4" style="text-align: right; font-weight: bold; background: #e6e6e6;"></td>
+                                <td colspan="2" style="text-align: center; font-weight: bold; background: #e6e6e6;">TOTAL <span style="margin-left: 25px; display:inline-block;">${totalQuantity}</span></td>
                             </tr>
                         </tbody>
                     </table>
@@ -186,8 +248,8 @@ define(['N/record', 'N/render'], (record, render) => {
 
                     <table class="signature-table">
                         <tr>
-                        <td><span class="signature-label">Prepared By</span></td>
-                        <td><span class="signature-label">Approved By</span></td>
+                            <td><span class="signature-label">Prepared By</span></td>
+                            <td><span class="signature-label">Approved By</span></td>
                         </tr>
                     </table>
 
