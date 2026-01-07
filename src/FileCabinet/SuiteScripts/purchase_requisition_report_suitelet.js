@@ -4,6 +4,10 @@
  */
 define(['N/record', 'N/render'], (record, render) => {
 
+    const ITEM_SPECIFICATION = 'custcol_item_specification';
+    const ITEM_BRAND = 'custcol_item_brand';
+    const ITEM_ORIGIN = 'custcol_item_origin';
+    const PO_TYPE = 'custbody_po_type';
 
     const onRequest = (context) => {
         const { response } = context;
@@ -22,12 +26,13 @@ define(['N/record', 'N/render'], (record, render) => {
             const purchaseRequistionRecord = record.load({ type: recordType, id: recordId, isdynamic: false });
 
             const date = purchaseRequistionRecord.getText({ fieldId: 'trandate' });
+            const department = purchaseRequistionRecord.getText({ fieldId: 'department' });
 
             const prCreatedBy = purchaseRequistionRecord.getText({ fieldId: 'entity' });
             const requistionNumber = purchaseRequistionRecord.getText({ fieldId: 'tranid' });
             const status = purchaseRequistionRecord.getText({ fieldId: 'approvalstatus' });
             const memo = purchaseRequistionRecord.getText({ fieldId: 'memo' });
-            const puchaseType = purchaseRequistionRecord.getText({ fieldId: 'custbody_po_type' });
+            const purchaseType = purchaseRequistionRecord.getText({ fieldId: PO_TYPE });
 
 
             // Build table rows dynamically
@@ -38,9 +43,9 @@ define(['N/record', 'N/render'], (record, render) => {
             if (purchaseRequistionRecordLineCount > 0) {
                 for (let i = 0; i < purchaseRequistionRecordLineCount; i++) {
                     const item = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'item_display', line: 0 }) || '';
-                    const itemSpecification = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'custcol69', line: 0 }) || '';
-                    const itemBrand = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'custcol70', line: 0 }) || '';
-                    const itemOrigin = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'custcol71', line: 0 }) || '';
+                    const itemSpecification = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_SPECIFICATION, line: 0 }) || '';
+                    const itemBrand = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_BRAND, line: 0 }) || '';
+                    const itemOrigin = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_ORIGIN, line: 0 }) || '';
                     const uom = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'units_display', line: 0 }) || '';
                     const qty = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'quantity', line: 0 }) || '';
 
@@ -102,7 +107,7 @@ define(['N/record', 'N/render'], (record, render) => {
                     width: 50%;
                     text-align: center;
                     padding-top: 300px;
-                    margin-left: 100px;
+                    margin-left: 130px;
                 }
                 .signature-label {
                     border-top: 1px solid #000;
@@ -162,7 +167,7 @@ define(['N/record', 'N/render'], (record, render) => {
                                             font-size: 8pt;
                                             margin-top: 4px;"
                                         >
-                                            ${escapeXml(date)}
+                                            ${date}
                                         </p>
 
                                         <p style="
@@ -187,7 +192,7 @@ define(['N/record', 'N/render'], (record, render) => {
                                             padding: 6px 0 3px 0;
                                             margin: 6px 0 0 80px;"
                                         >
-                                            Production
+                                            ${department}
                                         </p>
                                     </td>
                                     </tr>
@@ -216,7 +221,7 @@ define(['N/record', 'N/render'], (record, render) => {
                                 <td>${requistionNumber}</td>
                                 <td>${status}</td>
                                 <td>${memo}</td>
-                                <td>${puchaseType}</td>
+                                <td>${purchaseType}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -239,12 +244,12 @@ define(['N/record', 'N/render'], (record, render) => {
 
                             <tr style="border: 1px solid #e6e6e6;"></tr>
                             <tr style="margin-top: 8px;">
-                                <td colspan="4" style="text-align: right; font-weight: bold; background: #e6e6e6;"></td>
-                                <td colspan="2" style="text-align: center; font-weight: bold; background: #e6e6e6;">TOTAL <span style="margin-left: 25px; display:inline-block;">${totalQuantity}</span></td>
+                                <td colspan="4" style="background: #e6e6e6;"></td>
+                                <td style="font-weight: bold; background: #e6e6e6;">TOTAL</td>
+                                <td style="font-weight: bold; background: #e6e6e6;">${totalQuantity}</td>
                             </tr>
                         </tbody>
                     </table>
-
 
                     <table class="signature-table">
                         <tr>
@@ -257,14 +262,13 @@ define(['N/record', 'N/render'], (record, render) => {
             </pdf>`;
 
 
-
             const renderer = render.create();
             renderer.templateContent = template;
             const pdfFile = renderer.renderAsPdf();
             response.writeFile({ file: pdfFile, isInline: true });
         } catch (error) {
             // response.write(error.message);
-            response.write(error);
+            response.write({ output: escapeXml(error.message || JSON.stringify(error)) });
         }
     };
 
@@ -279,15 +283,15 @@ define(['N/record', 'N/render'], (record, render) => {
     }
 
 
-    function formatDate(dateInput) {
-        if (!dateInput) return '';
+    // function formatDate(dateInput) {
+    //     if (!dateInput) return '';
 
-        const date = new Date(dateInput);
-        const day = date.getDate();
-        const month = date.getMonth() + 1;
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-    }
+    //     const date = new Date(dateInput);
+    //     const day = date.getDate();
+    //     const month = date.getMonth() + 1;
+    //     const year = date.getFullYear();
+    //     return `${day}/${month}/${year}`;
+    // }
 
     return { onRequest };
 });
