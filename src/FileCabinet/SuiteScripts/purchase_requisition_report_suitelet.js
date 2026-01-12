@@ -9,6 +9,10 @@ define(['N/record', 'N/render'], (record, render) => {
     const ITEM_ORIGIN = 'custcol_item_origin';
     const PO_TYPE = 'custbody_po_type';
 
+    const NEXT_APPROVER = 'custbody1';
+    const REQUESTOR = 'entity';
+
+
     const onRequest = (context) => {
         const { response } = context;
 
@@ -26,13 +30,15 @@ define(['N/record', 'N/render'], (record, render) => {
             const purchaseRequistionRecord = record.load({ type: recordType, id: recordId, isdynamic: false });
 
             const date = purchaseRequistionRecord.getText({ fieldId: 'trandate' });
-            const department = purchaseRequistionRecord.getText({ fieldId: 'department' });
+            const department = escapeXml(purchaseRequistionRecord.getText({ fieldId: 'department' }));
 
-            const prCreatedBy = purchaseRequistionRecord.getText({ fieldId: 'entity' });
+            const prCreatedBy = escapeXml(purchaseRequistionRecord.getText({ fieldId: REQUESTOR }));
+            const approvedBy = purchaseRequistionRecord.getText({ fieldId: NEXT_APPROVER });
             const requistionNumber = purchaseRequistionRecord.getText({ fieldId: 'tranid' });
             const status = purchaseRequistionRecord.getText({ fieldId: 'approvalstatus' });
             const memo = purchaseRequistionRecord.getText({ fieldId: 'memo' });
             const purchaseType = purchaseRequistionRecord.getText({ fieldId: PO_TYPE });
+
 
 
             // Build table rows dynamically
@@ -42,12 +48,12 @@ define(['N/record', 'N/render'], (record, render) => {
 
             if (purchaseRequistionRecordLineCount > 0) {
                 for (let i = 0; i < purchaseRequistionRecordLineCount; i++) {
-                    const item = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'item_display', line: 0 }) || '';
-                    const itemSpecification = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_SPECIFICATION, line: 0 }) || '';
-                    const itemBrand = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_BRAND, line: 0 }) || '';
-                    const itemOrigin = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_ORIGIN, line: 0 }) || '';
-                    const uom = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'units_display', line: 0 }) || '';
-                    const qty = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'quantity', line: 0 }) || '';
+                    const item = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'item_display', line: i }) || '';
+                    const itemSpecification = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_SPECIFICATION, line: i }) || '';
+                    const itemBrand = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_BRAND, line: i }) || '';
+                    const itemOrigin = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_ORIGIN, line: i }) || '';
+                    const uom = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'units_display', line: i }) || '';
+                    const qty = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'quantity', line: i }) || '';
 
                     totalQuantity += Number(qty) || 0;
 
@@ -103,10 +109,13 @@ define(['N/record', 'N/render'], (record, render) => {
                 }
 
 
+                .signature-table{
+                    margin-top: 300px;
+                }
+
                 .signature-table td {
                     width: 50%;
                     text-align: center;
-                    padding-top: 300px;
                     margin-left: 130px;
                 }
                 .signature-label {
@@ -253,6 +262,10 @@ define(['N/record', 'N/render'], (record, render) => {
 
                     <table class="signature-table">
                         <tr>
+                            <td>${prCreatedBy}</td>
+                            <td>${approvedBy}</td>
+                        </tr>
+                        <tr>
                             <td><span class="signature-label">Prepared By</span></td>
                             <td><span class="signature-label">Approved By</span></td>
                         </tr>
@@ -282,17 +295,5 @@ define(['N/record', 'N/render'], (record, render) => {
             .replace(/'/g, '&apos;');
     }
 
-
-    // function formatDate(dateInput) {
-    //     if (!dateInput) return '';
-
-    //     const date = new Date(dateInput);
-    //     const day = date.getDate();
-    //     const month = date.getMonth() + 1;
-    //     const year = date.getFullYear();
-    //     return `${day}/${month}/${year}`;
-    // }
-
     return { onRequest };
 });
-
