@@ -17,8 +17,9 @@
  *   - custbody_qr_scanned (Checkbox) - Fulfillment status
  */
 
-define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
-    function (record, search, log, runtime, url) {
+define(['N/record', 'N/search', 'N/log', 'N/url'],
+    function (record, search, log, url) {
+
 
         /**
          * After Submit event handler
@@ -31,38 +32,23 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
         function afterSubmit(context) {
             try {
                 // Only process on CREATE and EDIT
-                if (context.type !== context.UserEventType.CREATE &&
-                    context.type !== context.UserEventType.EDIT) {
-                    log.debug({
-                        title: 'QR Generation Skipped',
-                        details: 'Event type: ' + context.type + ' (not CREATE or EDIT)'
-                    });
+                if (context.type !== context.UserEventType.CREATE && context.type !== context.UserEventType.EDIT) {
                     return;
                 }
 
-                var completionRecord = context.newRecord;
-                var completionId = completionRecord.id;
+                const woCompletionRecord = context.newRecord;
+                const woCompletionId = woCompletionRecord.id;
 
-                log.audit({
-                    title: 'QR Generation Started',
-                    details: 'Processing completion ID: ' + completionId + ' | Event: ' + context.type
-                });
 
-                // Extract completion data
-                var completionData = extractCompletionData(completionRecord);
+                const completionData = extractCompletionData(woCompletionRecord);
+                const inventoryDetail = extractInventoryDetail(woCompletionRecord, completionData.locationId);
+                const qrPayload = buildQRPayload(completionData, inventoryDetail);
 
-                // Extract inventory detail (lots/serials)
-                var inventoryDetail = extractInventoryDetail(completionRecord);
-
-                // Build QR payload
-                var qrPayload = buildQRPayload(completionData, inventoryDetail);
-
-                // Save payload to record
-                savePayloadToRecord(completionId, qrPayload);
+                savePayloadToRecord(woCompletionId, qrPayload);
 
                 log.audit({
                     title: 'QR Generation Complete',
-                    details: 'Completion ID: ' + completionId + ' | Payload: ' + JSON.stringify(qrPayload)
+                    details: 'Completion ID: ' + woCompletionId + ' | Payload: ' + JSON.stringify(qrPayload)
                 });
 
             } catch (e) {
@@ -73,118 +59,82 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
             }
         }
 
-        /**
-         * Extract basic completion data from record
-         *
-         * @param {record.Record} completionRecord
-         * @returns {Object} Completion data object
-         */
-        function extractCompletionData(completionRecord) {
+
+        function extractCompletionData(woCompletionRecord) {
             return {
-                completionId: completionRecord.id,
-                workOrderId: completionRecord.getValue({ fieldId: 'createdfrom' }) || '',
-                itemId: completionRecord.getValue({ fieldId: 'item' }) || '',
-                itemName: completionRecord.getText({ fieldId: 'item' }) || '',
-                quantity: parseFloat(completionRecord.getValue({ fieldId: 'quantity' }) || 0),
-                locationId: completionRecord.getValue({ fieldId: 'location' }) || '',
-                locationName: completionRecord.getText({ fieldId: 'location' }) || '',
-                tranDate: completionRecord.getValue({ fieldId: 'trandate' }) || '',
-                tranNumber: completionRecord.getValue({ fieldId: 'tranid' }) || ''
+                woCompletionId: woCompletionRecord.id,
+                woId: woCompletionRecord.getValue({ fieldId: 'createdfrom' }) || '',
+                itemId: woCompletionRecord.getValue({ fieldId: 'item' }) || '',
+                itemName: woCompletionRecord.getText({ fieldId: 'item' }) || '',
+                quantity: parseFloat(woCompletionRecord.getValue({ fieldId: 'quantity' }) || 0),
+                locationId: woCompletionRecord.getValue({ fieldId: 'location' }) || '',
+                locationName: woCompletionRecord.getText({ fieldId: 'location' }) || '',
+                tranDate: woCompletionRecord.getValue({ fieldId: 'trandate' }) || '',
+                tranId: woCompletionRecord.getValue({ fieldId: 'tranid' }) || ''
             };
         }
 
-        /**
-         * Extract inventory detail (lots, serials, bins) from completion record
-         *
-         * @param {record.Record} completionRecord
-         * @returns {Object} Inventory detail object
-         */
-        function extractInventoryDetail(completionRecord) {
-            var inventoryDetail = {
-                hasInventoryDetail: false,
-                lots: [],
-                serials: [],
-                bins: []
-            };
+        function extractInventoryDetail(woCompletionRecord, locationId) {
+            const inventoryDetailData = [];
 
             try {
-                // Get inventory detail subrecord
-                var inventorySubrecord = completionRecord.getSubrecord({
-                    fieldId: 'inventorydetail'
-                });
+                const inventoryDetailSubrecord = woCompletionRecord.getSubrecord({ fieldId: 'inventorydetail' });
 
-                if (!inventorySubrecord) {
+                if (!inventoryDetailSubrecord) {
                     log.debug('Inventory Detail', 'No inventory detail subrecord found');
-                    return inventoryDetail;
+                    return inventoryDetailData;
                 }
 
-                inventoryDetail.hasInventoryDetail = true;
-
-                // Get number of inventory assignment lines
-                var lineCount = inventorySubrecord.getLineCount({
-                    sublistId: 'inventoryassignment'
-                });
-
+                const lineCount = inventoryDetailSubrecord.getLineCount({ sublistId: 'inventoryassignment' });
                 log.debug('Inventory Lines', 'Found ' + lineCount + ' inventory assignment lines');
 
-                // Loop through inventory assignment lines
-                for (var i = 0; i < lineCount; i++) {
-                    var inventoryNumber = inventorySubrecord.getSublistText({
+
+                for (let i = 0; i < lineCount; i++) {
+                    let lotInternalId = '';
+
+                    const lotText = inventoryDetailSubrecord.getSublistText({
                         sublistId: 'inventoryassignment',
                         fieldId: 'receiptinventorynumber',
                         line: i
-                    }) || '';
+                    });
 
-                    var inventoryNumberId = inventorySubrecord.getSublistValue({
+
+                    if (lotText) {
+                        // find lotText internal id
+                        const itemId = inventoryDetailSubrecord.getValue('item')
+                        lotInternalId = getLotInternalIdFromText(lotText, itemId, locationId);
+                    }
+
+                    const binText = inventoryDetailSubrecord.getSublistText({
                         sublistId: 'inventoryassignment',
-                        fieldId: 'receiptinventorynumber',
+                        fieldId: 'binnumber',
                         line: i
                     }) || '';
 
-                    // Diagnostic logging
-                    log.debug('Inv Detail Line ' + i, 'Number: ' + inventoryNumber + ' | ID: ' + inventoryNumberId + ' | Type: ' + typeof inventoryNumberId);
+                    const binId = inventoryDetailSubrecord.getSublistValue({
+                        sublistId: 'inventoryassignment',
+                        fieldId: 'binnumber',
+                        line: i
+                    }) || '';
 
-                    var qty = parseFloat(inventorySubrecord.getSublistValue({
+                    const qty = parseFloat(inventoryDetailSubrecord.getSublistValue({
                         sublistId: 'inventoryassignment',
                         fieldId: 'quantity',
                         line: i
                     }) || 0);
 
-                    var binNumber = inventorySubrecord.getSublistText({
-                        sublistId: 'inventoryassignment',
-                        fieldId: 'binnumber',
-                        line: i
-                    }) || '';
-
-                    var binNumberId = inventorySubrecord.getSublistValue({
-                        sublistId: 'inventoryassignment',
-                        fieldId: 'binnumber',
-                        line: i
-                    }) || '';
-
-                    // Determine if this is a lot or serial
-                    // Serial items typically have qty = 1
-                    var isSerial = (qty === 1);
-
-                    var invDetail = {
-                        number: inventoryNumber,
-                        numberId: inventoryNumberId,
-                        qty: qty,
-                        bin: binNumber,
-                        binId: binNumberId
+                    const inventoryLineInfo = {
+                        lotText,
+                        lotInternalId,
+                        binText,
+                        binId,
+                        qty,
                     };
 
-                    if (isSerial) {
-                        inventoryDetail.serials.push(invDetail);
-                    } else {
-                        inventoryDetail.lots.push(invDetail);
-                    }
-
-                    // Track unique bins
-                    if (binNumber && inventoryDetail.bins.indexOf(binNumber) === -1) {
-                        inventoryDetail.bins.push(binNumber);
-                    }
+                    inventoryDetailData.push(inventoryLineInfo);
                 }
+
+                return inventoryDetailData;
 
             } catch (e) {
                 log.error({
@@ -192,8 +142,6 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
                     details: 'Error: ' + e.message
                 });
             }
-
-            return inventoryDetail;
         }
 
         /**
@@ -204,50 +152,21 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
          * @returns {Object} QR payload object
          */
         function buildQRPayload(completionData, inventoryDetail) {
-            var payload = {
+            const payload = {
                 type: 'WO_COMPLETION',
-                id: completionData.completionId,
-                wo: completionData.workOrderId,
-                item: completionData.itemId,
+                woCompletionId: completionData.woCompletionId,
+                woId: completionData.woId,
+                itemId: completionData.itemId,
                 itemName: completionData.itemName,
                 qty: completionData.quantity,
-                loc: completionData.locationId,
-                locName: completionData.locationName,
+                locationId: completionData.locationId,
+                locationName: completionData.locationName,
                 date: completionData.tranDate,
-                tranNum: completionData.tranNumber
+                tranId: completionData.tranId
             };
 
-            // Add inventory detail if present
-            if (inventoryDetail.hasInventoryDetail) {
-                // Add lots
-                if (inventoryDetail.lots.length > 0) {
-                    payload.lots = inventoryDetail.lots.map(function (lot) {
-                        return {
-                            num: lot.number,
-                            numId: lot.numberId,
-                            qty: lot.qty,
-                            bin: lot.bin,
-                            binId: lot.binId
-                        };
-                    });
-                }
-
-                // Add serials
-                if (inventoryDetail.serials.length > 0) {
-                    payload.serials = inventoryDetail.serials.map(function (serial) {
-                        return {
-                            num: serial.number,
-                            numId: serial.numberId,
-                            bin: serial.bin,
-                            binId: serial.binId
-                        };
-                    });
-                }
-
-                // Add bins as array for quick reference
-                if (inventoryDetail.bins.length > 0) {
-                    payload.bins = inventoryDetail.bins;
-                }
+            if (inventoryDetail.length > 0) {
+                payload.inventoryDetail = inventoryDetail;
             }
 
             return payload;
@@ -256,21 +175,20 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
         /**
          * Save QR payload and image URL to completion record
          *
-         * @param {string} completionId
+         * @param {string} woCompletionId
          * @param {Object} qrPayload
          */
-        function savePayloadToRecord(completionId, qrPayload) {
+        function savePayloadToRecord(woCompletionId, qrPayload) {
             try {
-                // Convert payload to JSON string
-                var payloadString = JSON.stringify(qrPayload);
+                const payloadString = JSON.stringify(qrPayload);
 
                 // Get Suitelet URL for QR code rendering
-                var qrImageUrl = getQRImageUrl(completionId);
+                const qrImageUrl = getQRImageUrl(woCompletionId);
 
                 // Update the record
                 record.submitFields({
                     type: 'workordercompletion',
-                    id: completionId,
+                    id: woCompletionId,
                     values: {
                         custbody_qr_payload: payloadString,
                         custbody_qr_image: qrImageUrl,
@@ -282,15 +200,10 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
                     }
                 });
 
-                log.debug({
-                    title: 'Payload Saved',
-                    details: 'Completion ID: ' + completionId + ' | Payload length: ' + payloadString.length + ' chars'
-                });
-
             } catch (e) {
                 log.error({
                     title: 'Error Saving Payload',
-                    details: 'Completion ID: ' + completionId + ' | Error: ' + e.message
+                    details: 'Completion ID: ' + woCompletionId + ' | Error: ' + e.message
                 });
                 throw e;
             }
@@ -299,18 +212,16 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
         /**
          * Generate URL for QR code rendering Suitelet
          *
-         * @param {string} completionId
+         * @param {string} woCompletionId
          * @returns {string} Suitelet URL
          */
-        function getQRImageUrl(completionId) {
+        function getQRImageUrl(woCompletionId) {
             try {
-                // Resolve Suitelet URL
-                // Note: Update scriptId and deploymentId to match your deployment
-                var suiteletUrl = url.resolveScript({
+                const suiteletUrl = url.resolveScript({
                     scriptId: 'customscript_sl_qr_renderer',
                     deploymentId: 'customdeploy_sl_qr_renderer',
                     params: {
-                        id: completionId
+                        id: woCompletionId
                     }
                 });
 
@@ -325,7 +236,40 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime', 'N/url'],
             }
         }
 
+
+        function getLotInternalIdFromText(lotText, itemId, locationId) {
+            if (!lotText) return null;
+
+            try {
+                const lotSearch = search.create({
+                    type: 'inventorynumber',
+                    filters: [
+                        ['inventorynumber', 'is', lotText],
+                        'AND',
+                        ['item', 'anyof', itemId],
+                        'AND',
+                        ['location', 'anyof', locationId]
+                    ],
+                    columns: [
+                        search.createColumn({ name: 'internalid' })
+                    ]
+                });
+
+                const result = lotSearch.run().getRange({ start: 0, end: 1 })[0];
+
+                if (result) {
+                    const lotId = result.getValue('internalid');
+                    return lotId;
+                }
+
+                return '';
+            } catch (error) {
+                log.error("Error when searching lot internal id", error.message);
+            }
+
+        }
+
         return {
-            afterSubmit: afterSubmit
+            afterSubmit
         };
     });
