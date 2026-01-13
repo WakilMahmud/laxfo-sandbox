@@ -33,7 +33,7 @@ define(['N/record', 'N/render'], (record, render) => {
             const department = escapeXml(purchaseRequistionRecord.getText({ fieldId: 'department' }));
 
             const prCreatedBy = escapeXml(purchaseRequistionRecord.getText({ fieldId: REQUESTOR }));
-            const approvedBy = purchaseRequistionRecord.getText({ fieldId: NEXT_APPROVER });
+            const approvedBy = escapeXml(purchaseRequistionRecord.getText({ fieldId: NEXT_APPROVER }));
             const requistionNumber = purchaseRequistionRecord.getText({ fieldId: 'tranid' });
             const status = purchaseRequistionRecord.getText({ fieldId: 'approvalstatus' });
             const memo = purchaseRequistionRecord.getText({ fieldId: 'memo' });
