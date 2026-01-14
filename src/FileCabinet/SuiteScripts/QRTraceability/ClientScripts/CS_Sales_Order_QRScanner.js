@@ -6,32 +6,19 @@
  * Script: CS_Sales_Order_QRScanner.js
  * Description: Handles QR code scanning on Sales Order to auto-populate item lines
  *
- * Deployment:
- *   - Record Type: Sales Order
- *   - Form: Standard Item Fulfillment form
- *
  * Required Library:
  *   - QRTraceabilityLib.js
  */
 
-define(['N/currentRecord', 'N/ui/message', 'N/url', 'N/https', '../lib/QRTraceabilityLib'],
-    function (currentRecord, message, url, https, QRLib) {
+define(['N/ui/message', '../lib/QRTraceabilityLib'],
+    function (message, QRLib) {
 
         // Module-level variables
         let scannedCompletions = []; // Track completions scanned in this session
         let currentMessage = null; // Track current UI message
 
-        /**
-        * Page Init event handler
-        * Initialize scan field and load previously scanned completions
-        *
-        * @param {Object} context
-        */
         function pageInit(context) {
             try {
-                // Expose function for button access
-                window.processQRScans = processQRScans;
-
                 const rec = context.currentRecord;
 
                 // Load previously scanned completions if record is being edited
@@ -171,10 +158,6 @@ define(['N/currentRecord', 'N/ui/message', 'N/url', 'N/https', '../lib/QRTraceab
 
                 console.log('Matched line:', lineMatch.lineNumber);
 
-                // NOTE: Line population moved to server-side beforeSubmit
-                // to avoid client-side "Please configure inventory detail" validation errors.
-                // We only store the reference and show a message here.
-
                 // Add to scanned completions
                 scannedCompletions.push(qrData.woCompletionId);
                 updateCompletionReferences(rec);
@@ -256,158 +239,9 @@ define(['N/currentRecord', 'N/ui/message', 'N/url', 'N/https', '../lib/QRTraceab
             }
         }
 
-        /**
-         * Validate Line event handler
-         * Optional validation before committing line
-         *
-         * @param {Object} context
-         * @returns {boolean} True to allow line commit
-         */
-        function validateLine(context) {
-            // Reserved for future validation logic
-            return true;
-        }
-
-        /**
-         * Save Record event handler
-         * Final validation before saving fulfillment
-         *
-         * @param {Object} context
-         * @returns {boolean} True to allow save
-         */
-        function saveRecord(context) {
-            try {
-                const rec = context.currentRecord;
-
-                // rec.setValue({
-                //     fieldId: 'custbody_scan_qr',
-                //     value: '',
-                //     ignoreFieldChange: true
-                // });
-
-                // rec.setValue({
-                //     fieldId: 'custbody_wo_completion_ref',
-                //     value: ''
-                // });
-
-                // rec.setValue({
-                //     fieldId: 'custbody_qr_scan_count',
-                //     value: ''
-                // })
-
-                return true; // Allow save
-
-            } catch (e) {
-                console.error('Error in saveRecord:', e.message);
-                return true; // Allow save even if error
-            }
-        }
-
-        /**
-         * Process Scans via Suitelet
-         * This bypasses all browser validation errors
-         */
-        function processQRScans() {
-            try {
-                var rec = currentRecord.get();
-                var completionRefs = rec.getValue({
-                    fieldId: 'custbody_wo_completion_ref'
-                });
-
-                if (!completionRefs || completionRefs === '[]') {
-                    showMessage({
-                        title: 'No Scans Found',
-                        message: 'Please scan at least one QR code before processing.',
-                        type: message.Type.WARNING
-                    });
-                    return;
-                }
-
-                var msg = message.create({
-                    title: 'Processing Fulfillment',
-                    message: 'Communicating with server... Please wait.',
-                    type: message.Type.INFORMATION
-                });
-                msg.show();
-
-                // Resolve Suitelet URL 
-                // We use the same Suitelet script but with a POST action
-                var suiteletUrl = url.resolveScript({
-                    scriptId: 'customscript_sl_qr_renderer',
-                    deploymentId: 'customdeploy_sl_qr_renderer',
-                    params: {
-                        action: 'PROCESS_FULFILLMENT'
-                    }
-                });
-
-                console.log('Calling Suitelet:', suiteletUrl);
-
-                https.post.promise({
-                    url: suiteletUrl,
-                    body: JSON.stringify({
-                        fulfillmentId: rec.id || '',
-                        createdFrom: rec.getValue({ fieldId: 'createdfrom' }) || '',
-                        completionRefs: completionRefs,
-                        recordType: rec.type
-                    }),
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }).then(function (response) {
-                    msg.hide();
-                    try {
-                        var result = JSON.parse(response.body);
-
-                        if (result.success) {
-                            showMessage({
-                                title: 'Success',
-                                message: 'Fulfillment processed and saved successfully. Redirecting...',
-                                type: message.Type.CONFIRMATION
-                            });
-
-                            // Redirect to the saved record or refresh
-                            setTimeout(function () {
-                                window.location.href = url.resolveRecord({
-                                    recordType: rec.type,
-                                    recordId: result.recordId || rec.id,
-                                    isEditMode: false
-                                });
-                            }, 1500);
-                        } else {
-                            showMessage({
-                                title: 'Error Processing Scans',
-                                message: result.error || 'An unknown error occurred.',
-                                type: message.Type.ERROR
-                            });
-                        }
-                    } catch (e) {
-                        console.error('JSON Parse Error:', e);
-                        showMessage({
-                            title: 'Response Error',
-                            message: 'Server returned an invalid response.',
-                            type: message.Type.ERROR
-                        });
-                    }
-                }).catch(function (e) {
-                    msg.hide();
-                    console.error('Suitelet Communication Error:', e);
-                    showMessage({
-                        title: 'Communication Error',
-                        message: 'Failed to reach the server. Details: ' + e.message,
-                        type: message.Type.ERROR
-                    });
-                });
-
-            } catch (e) {
-                console.error('Error in processQRScans:', e.message);
-            }
-        }
 
         return {
             pageInit,
-            fieldChanged,
-            processQRScans,
-            // saveRecord
-            // validateLine,
+            fieldChanged
         };
     });

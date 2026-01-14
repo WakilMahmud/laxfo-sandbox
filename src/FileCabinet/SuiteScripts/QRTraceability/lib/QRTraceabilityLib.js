@@ -184,54 +184,6 @@ define(['N/search', 'N/log'],
         }
 
         /**
-         * Lookup inventory number internal ID by lot/serial number
-         *
-         * @param {string} inventoryNumber - Lot or serial number (text)
-         * @param {string} itemId - Item internal ID
-         * @returns {Object} { found: boolean, internalId: string, error: string }
-         */
-        function lookupInventoryNumber(inventoryNumber, itemId) {
-            var result = {
-                found: false,
-                internalId: '',
-                error: ''
-            };
-
-            try {
-                if (!inventoryNumber || !itemId) {
-                    result.error = 'Missing required parameters for lookup';
-                    return result;
-                }
-
-                var invNumSearch = search.create({
-                    type: 'inventorynumber',
-                    filters: [
-                        ['inventorynumber', 'is', inventoryNumber],
-                        'AND',
-                        ['item', 'is', itemId]
-                    ],
-                    columns: ['internalid']
-                });
-
-                invNumSearch.run().each(function (result_item) {
-                    result.found = true;
-                    result.internalId = result_item.id;
-                    return false; // Only need first result
-                });
-
-                if (!result.found) {
-                    result.error = 'Inventory number "' + inventoryNumber + '" not found for item ID: ' + itemId;
-                }
-
-            } catch (e) {
-                result.error = 'Error looking up inventory number: ' + e.message;
-                log.error('Error in lookupInventoryNumber', e.message);
-            }
-
-            return result;
-        }
-
-        /**
          * Format user-friendly error message
          *
          * @param {string} errorType - Type of error
@@ -253,116 +205,14 @@ define(['N/search', 'N/log'],
             return messages[errorType] || messages['GENERAL_ERROR'];
         }
 
-        /**
-         * Build inventory assignment data from QR payload
-         *
-         * @param {Object} qrData - Parsed QR data
-         * @param {string} itemId - Item internal ID
-         * @returns {Object} { success: boolean, assignments: array, error: string }
-         */
-        function buildInventoryAssignments(qrData, itemId) {
-            var result = {
-                success: false,
-                assignments: [],
-                error: ''
-            };
 
-            try {
-                // Process lots
-                if (qrData.lots && qrData.lots.length > 0) {
-                    for (var i = 0; i < qrData.lots.length; i++) {
-                        var lot = qrData.lots[i];
-
-                        // Look up lot internal ID if only number is provided
-                        var lotId = lot.numId;
-                        if (!lotId && lot.num) {
-                            var lotLookup = lookupInventoryNumber(lot.num, itemId);
-                            if (!lotLookup.found) {
-                                result.error = lotLookup.error;
-                                return result;
-                            }
-                            lotId = lotLookup.internalId;
-                        }
-
-                        result.assignments.push({
-                            type: 'lot',
-                            inventoryNumberId: lotId,
-                            inventoryNumber: lot.num,
-                            quantity: lot.qty,
-                            binId: lot.binId || '',
-                            bin: lot.bin || ''
-                        });
-                    }
-                }
-
-                // Process serials
-                if (qrData.serials && qrData.serials.length > 0) {
-                    for (var j = 0; j < qrData.serials.length; j++) {
-                        var serial = qrData.serials[j];
-
-                        // Look up serial internal ID if only number is provided OR if ID is not numeric
-                        var serialId = serial.numId;
-                        if (!serialId || isNaN(serialId) || serialId === serial.num) {
-                            log.debug('ID Lookup Needed', 'Serial: ' + serial.num + ' | Current ID: ' + serialId);
-                            var serialLookup = lookupInventoryNumber(serial.num, itemId);
-                            if (!serialLookup.found) {
-                                result.error = serialLookup.error;
-                                return result;
-                            }
-                            serialId = serialLookup.internalId;
-                        }
-
-                        result.assignments.push({
-                            type: 'serial',
-                            inventoryNumberId: serialId,
-                            inventoryNumber: serial.num,
-                            quantity: 1, // Serials always qty 1
-                            binId: serial.binId || '',
-                            bin: serial.bin || ''
-                        });
-                    }
-                }
-
-                result.success = true;
-
-            } catch (e) {
-                result.error = 'Error building inventory assignments: ' + e.message;
-                log.error('Error in buildInventoryAssignments', e.message);
-            }
-
-            return result;
-        }
-
-        /**
-         * Validate that scanned quantity doesn't exceed line quantity
-         *
-         * @param {number} scannedQty - Quantity from QR
-         * @param {number} lineQty - Quantity on fulfillment line
-         * @returns {Object} { valid: boolean, error: string }
-         */
-        function validateQuantity(scannedQty, lineQty) {
-            if (scannedQty > lineQty) {
-                return {
-                    valid: false,
-                    error: 'Scanned quantity (' + scannedQty + ') exceeds line quantity (' + lineQty + ')'
-                };
-            }
-
-            return {
-                valid: true,
-                error: ''
-            };
-        }
 
         // Return public functions
         return {
             parseQRData: parseQRData,
             validateQRStructure: validateQRStructure,
             findMatchingLine: findMatchingLine,
-            checkCompletionStatus: checkCompletionStatus,
-            lookupInventoryNumber: lookupInventoryNumber,
             formatErrorMessage: formatErrorMessage,
-            buildInventoryAssignments: buildInventoryAssignments,
-            validateQuantity: validateQuantity
+            checkCompletionStatus: checkCompletionStatus
         };
     });
