@@ -48,12 +48,12 @@ define(['N/record', 'N/render'], (record, render) => {
 
             if (purchaseRequistionRecordLineCount > 0) {
                 for (let i = 0; i < purchaseRequistionRecordLineCount; i++) {
-                    const item = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'item_display', line: i }) || '';
-                    const itemSpecification = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_SPECIFICATION, line: i }) || '';
-                    const itemBrand = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_BRAND, line: i }) || '';
-                    const itemOrigin = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_ORIGIN, line: i }) || '';
-                    const uom = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'units_display', line: i }) || '';
-                    const qty = purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'quantity', line: i }) || '';
+                    const item = escapeXml(purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'item_display', line: i })) || '';
+                    const itemSpecification = escapeXml(purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_SPECIFICATION, line: i })) || '';
+                    const itemBrand = escapeXml(purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_BRAND, line: i })) || '';
+                    const itemOrigin = escapeXml(purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: ITEM_ORIGIN, line: i })) || '';
+                    const uom = escapeXml(purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'units_display', line: i })) || '';
+                    const qty = escapeXml(purchaseRequistionRecord.getSublistText({ sublistId: 'item', fieldId: 'quantity', line: i })) || '';
 
                     totalQuantity += Number(qty) || 0;
 
