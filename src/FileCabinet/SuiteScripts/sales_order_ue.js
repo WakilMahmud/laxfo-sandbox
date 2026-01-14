@@ -4,87 +4,103 @@
  */
 define(['N/log', 'N/record', 'N/search'], (log, record, search) => {
 
-    /**
-     * Defines the function definition that is executed before record is submitted.
-     * @param {Object} scriptContext
-     * @param {Record} scriptContext.newRecord - New record
-     * @param {Record} scriptContext.oldRecord - Old record
-     * @param {string} scriptContext.type - Trigger type; use values from the scriptContext.UserEventType enum
-     * @since 2015.2
-     */
+
     const beforeSubmit = (scriptContext) => {
         try {
-            // if (scriptContext.type !== scriptContext.UserEventType.CREATE && scriptContext.type !== scriptContext.UserEventType.EDIT) return;
+            if (scriptContext.type !== scriptContext.UserEventType.CREATE && scriptContext.type !== scriptContext.UserEventType.EDIT) return;
 
-            // let rec = scriptContext.newRecord;  // or scriptContext.oldRecord + load if needed
-
-            // let itemCount = rec.getLineCount({ sublistId: 'item' });
-            // // log.debug('Item lines', itemCount);
-
-            // for (let i = 0; i < itemCount; i++) {
-
-            //     var subrecordInvDetail = rec.getSublistSubrecord({
-            //         sublistId: 'item',
-            //         fieldId: 'inventorydetail',
-            //         line: i
-            //     });
-
-            //     const assignCount = subrecordInvDetail.getLineCount({ sublistId: 'inventoryassignment' });
-            //     log.debug("Assign Count", assignCount);
+            const rec = scriptContext.newRecord;
+            const scannedQrCode = rec.getValue({ fieldId: 'custbody_scan_qr' }) ? JSON.parse(rec.getValue({ fieldId: 'custbody_scan_qr' })) : {};
 
 
-            //     if (assignCount > 0) {
-            //         // Example: update first assignment line
-            //         subrecordInvDetail.setSublistValue({
-            //             sublistId: 'inventoryassignment',
-            //             fieldId: 'issueinventorynumber',
-            //             line: 0,                     // ← line index, not internal id
-            //             value: 4144                  // internal id of the inventorynumber record
-            //         });
+            log.debug("Scanned Qr Code", scannedQrCode);
 
-            //         subrecordInvDetail.setSublistValue({
-            //             sublistId: 'inventoryassignment',
-            //             fieldId: 'quantity',
-            //             line: 0,
-            //             value: 0.3
-            //         });
+            let itemCount = rec.getLineCount({ sublistId: 'item' });
+            log.debug('Item lines', itemCount);
 
-            //         // rec.getSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i })
-            //     } else {
-            //         // If no assignment lines yet → insert one
-            //         subrecordInvDetail.insertLine({
-            //             sublistId: 'inventoryassignment',
-            //             line: 0
-            //         });
 
-            //         subrecordInvDetail.setSublistValue({
-            //             sublistId: 'inventoryassignment',
-            //             fieldId: 'issueinventorynumber',
-            //             line: 0,
-            //             value: 4144
-            //         });
+            if (scannedQrCode && itemCount) {
+                for (let i = 0; i < itemCount; i++) {
+                    const itemId = rec.getSublistValue({
+                        sublistId: 'item',
+                        fieldId: 'item',
+                        line: i
+                    });
 
-            //         subrecordInvDetail.setSublistValue({
-            //             sublistId: 'inventoryassignment',
-            //             fieldId: 'quantity',
-            //             line: 0,
-            //             value: 0.5   // or match item quantity
-            //         });
-            //     }
+                    if (itemId == scannedQrCode?.itemId) {
+                        const inventoryDetailSubrecord = rec.getSublistSubrecord({
+                            sublistId: 'item',
+                            fieldId: 'inventorydetail',
+                            line: i
+                        });
 
-            // // subrecordInvDetail.commitLine({ sublistId: 'inventoryassignment' });
+                        const assignCount = inventoryDetailSubrecord.getLineCount({ sublistId: 'inventoryassignment' });
+                        log.debug("Assign Count", assignCount);
 
-            // // rec.commitLine({
-            // //     sublistId: 'item'
-            // // });
-            // }
-        } catch (error) {
-            log.debug("Error", error);
+
+                        const lineCount = scannedQrCode?.inventoryDetail?.length;
+
+                        for (let j = 0; j < lineCount; j++) {
+                            // If no assignment lines yet → insert one
+                            inventoryDetailSubrecord.insertLine({
+                                sublistId: 'inventoryassignment',
+                                line: j
+                            });
+
+                            inventoryDetailSubrecord.setSublistValue({
+                                sublistId: 'inventoryassignment',
+                                fieldId: 'issueinventorynumber',
+                                line: j,
+                                value: scannedQrCode?.inventoryDetail[j]?.lotInternalId
+                            });
+
+                            inventoryDetailSubrecord.setSublistValue({
+                                sublistId: 'inventoryassignment',
+                                fieldId: 'quantity',
+                                line: j,
+                                value: scannedQrCode?.inventoryDetail[j]?.qty
+                            });
+                        }
+                    }
+
+
+                }
+            }
+
+        }
+        catch (error) {
+            log.debug("Error in beforeSubmit", error);
         }
     }
 
 
-    return { beforeSubmit }
+    function afterSubmit(scriptContext) {
+        try {
+            if (scriptContext.type !== scriptContext.UserEventType.CREATE && scriptContext.type !== scriptContext.UserEventType.EDIT) return;
+
+            const rec = scriptContext.newRecord;
+            const salesOrderId = rec.id;
+
+            record.submitFields({
+                type: 'salesorder',
+                id: salesOrderId,
+                values: {
+                    'custbody_scan_qr': '',
+                    'custbody_wo_completion_ref': '',
+                    'custbody_qr_scan_count': ''
+                }
+            })
+
+        } catch (error) {
+            log.debug("Error in afterSubmit", error);
+        }
+    }
+
+
+    return {
+        beforeSubmit,
+        afterSubmit
+    }
 
 });
 
@@ -103,26 +119,26 @@ define(['N/log', 'N/record', 'N/search'], (log, record, search) => {
 // // console.log({ itemCount });
 
 // // for (let i = 0; i < itemCount; i++) {
-// //     const subrecordInvDetail = rec.getCurrentSublistSubrecord({
+// //     const inventoryDetailSubrecord = rec.getCurrentSublistSubrecord({
 // //         sublistId: 'item',
 // //         fieldId: 'inventorydetail',
 // //     });
 
-// //     console.log({ subrecordInvDetail });
+// //     console.log({ inventoryDetailSubrecord });
 
 
-// //     // const serialNumber = subrecordInvDetail.getSublistValue({
+// //     // const serialNumber = inventoryDetailSubrecord.getSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'issueinventorynumber',
 // //     //     line: 0
 // //     // });
-// //     // const bin = subrecordInvDetail.getSublistValue({
+// //     // const bin = inventoryDetailSubrecord.getSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'binnumber',
 // //     //     line: 0
 // //     // });
 
-// //     // const status = subrecordInvDetail.getSublistValue({
+// //     // const status = inventoryDetailSubrecord.getSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'inventorystatus',
 // //     //     line: 0
@@ -161,57 +177,57 @@ define(['N/log', 'N/record', 'N/search'], (log, record, search) => {
 
 
 
-// //     // subrecordInvDetail.selectNewLine({
+// //     // inventoryDetailSubrecord.selectNewLine({
 // //     //     sublistId: 'inventoryassignment'
 // //     // });
-// //     // subrecordInvDetail.setCurrentSublistValue({
+// //     // inventoryDetailSubrecord.setCurrentSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'issueinventorynumber',
 // //     //     value: '4144'
 // //     // });
-// //     // subrecordInvDetail.setCurrentSublistValue({
+// //     // inventoryDetailSubrecord.setCurrentSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'binnumber',
 // //     //     value: '1'
 // //     // });
-// //     // subrecordInvDetail.setCurrentSublistValue({
+// //     // inventoryDetailSubrecord.setCurrentSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'inventorystatus',
 // //     //     value: '1'
 // //     // });
-// //     // subrecordInvDetail.setCurrentSublistValue({
+// //     // inventoryDetailSubrecord.setCurrentSublistValue({
 // //     //     sublistId: 'inventoryassignment',
 // //     //     fieldId: 'quantity',
 // //     //     value: '1'
 // //     // });
-// //     // subrecordInvDetail.commitLine({
+// //     // inventoryDetailSubrecord.commitLine({
 // //     //     sublistId: 'inventoryassignment'
 // //     // });
 
 
 // //     // Now, set values for the subrecord (inventoryassignment)
-// //     subrecordInvDetail.setSublistValue({
+// //     inventoryDetailSubrecord.setSublistValue({
 // //         sublistId: 'inventoryassignment',
 // //         fieldId: 'issueinventorynumber',
 // //         line: 0,  // Ensure you're targeting the correct line in the sublist
 // //         value: '4144'  // The internal ID of the serial number
 // //     });
 
-// //     subrecordInvDetail.setSublistValue({
+// //     inventoryDetailSubrecord.setSublistValue({
 // //         sublistId: 'inventoryassignment',
 // //         fieldId: 'binnumber',
 // //         line: 0,  // Ensure you're targeting the correct line in the sublist
 // //         value: '1'  // The internal ID of the bin
 // //     });
 
-// //     subrecordInvDetail.setSublistValue({
+// //     inventoryDetailSubrecord.setSublistValue({
 // //         sublistId: 'inventoryassignment',
 // //         fieldId: 'inventorystatus',
 // //         line: 0,  // Ensure you're targeting the correct line in the sublist
 // //         value: '1'  // The internal ID of the status
 // //     });
 
-// //     subrecordInvDetail.setSublistValue({
+// //     inventoryDetailSubrecord.setSublistValue({
 // //         sublistId: 'inventoryassignment',
 // //         fieldId: 'quantity',
 // //         line: 0,  // Ensure you're targeting the correct line in the sublist
@@ -219,7 +235,7 @@ define(['N/log', 'N/record', 'N/search'], (log, record, search) => {
 // //     });
 
 // //     // Commit the changes to the subrecord line
-// //     subrecordInvDetail.commitLine({
+// //     inventoryDetailSubrecord.commitLine({
 // //         sublistId: 'inventoryassignment'
 // //     });
 

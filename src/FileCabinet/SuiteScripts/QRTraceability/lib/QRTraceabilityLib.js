@@ -72,12 +72,12 @@ define(['N/search', 'N/log'],
                 return result;
             }
 
-            if (!qrData.id) {
+            if (!qrData.woCompletionId) {
                 result.error = 'Missing completion ID in QR code';
                 return result;
             }
 
-            if (!qrData.item) {
+            if (!qrData.itemId) {
                 result.error = 'Missing item in QR code';
                 return result;
             }

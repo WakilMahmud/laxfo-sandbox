@@ -3,41 +3,39 @@
  * @NScriptType ClientScript
  * @NModuleScope SameAccount
  *
- * Script: CS_ItemFulfillment_QRScanner.js
- * Description: Handles QR code scanning on Item Fulfillment to auto-populate item lines
+ * Script: CS_Sales_Order_QRScanner.js
+ * Description: Handles QR code scanning on Sales Order to auto-populate item lines
  *
  * Deployment:
- *   - Record Type: Item Fulfillment
+ *   - Record Type: Sales Order
  *   - Form: Standard Item Fulfillment form
  *
  * Required Library:
  *   - QRTraceabilityLib.js
  */
 
-define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/QRTraceabilityLib'],
-    function (currentRecord, message, log, url, https, QRLib) {
+define(['N/currentRecord', 'N/ui/message', 'N/url', 'N/https', '../lib/QRTraceabilityLib'],
+    function (currentRecord, message, url, https, QRLib) {
 
         // Module-level variables
-        var scannedCompletions = []; // Track completions scanned in this session
-        var currentMessage = null; // Track current UI message
+        let scannedCompletions = []; // Track completions scanned in this session
+        let currentMessage = null; // Track current UI message
 
         /**
-         * Page Init event handler
-         * Initialize scan field and load previously scanned completions
-         *
-         * @param {Object} context
-         */
+        * Page Init event handler
+        * Initialize scan field and load previously scanned completions
+        *
+        * @param {Object} context
+        */
         function pageInit(context) {
             try {
                 // Expose function for button access
                 window.processQRScans = processQRScans;
 
-                var rec = context.currentRecord;
+                const rec = context.currentRecord;
 
                 // Load previously scanned completions if record is being edited
-                var completionRefs = rec.getValue({
-                    fieldId: 'custbody_wo_completion_ref'
-                });
+                const completionRefs = rec.getValue({ fieldId: 'custbody_wo_completion_ref' });
 
                 if (completionRefs) {
                     try {
@@ -53,10 +51,10 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
                 // Clear scan field on load
                 rec.setValue({
                     fieldId: 'custbody_scan_qr',
-                    value: ''
+                    value: '',
+                    ignoreFieldChange: true
                 });
 
-                // Show info message
                 showMessage({
                     title: 'QR Scanner Ready',
                     message: 'Scan QR codes from Work Order Completions to auto-populate lines',
@@ -79,8 +77,8 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
          */
         function fieldChanged(context) {
             try {
-                var rec = context.currentRecord;
-                var fieldId = context.fieldId;
+                const rec = context.currentRecord;
+                const fieldId = context.fieldId;
 
                 // Only process scan field
                 if (fieldId !== 'custbody_scan_qr') {
@@ -101,10 +99,11 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
                 processQRScan(rec, scanValue);
 
                 // Clear scan field for next scan
-                rec.setValue({
-                    fieldId: 'custbody_scan_qr',
-                    value: ''
-                });
+                // rec.setValue({
+                //     fieldId: 'custbody_scan_qr',
+                //     value: '',
+                //     ignoreFieldChange: true
+                // });
 
             } catch (e) {
                 console.error('Error in fieldChanged:', e.message);
@@ -139,7 +138,7 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
                 console.log('Parsed QR Data:', qrData);
 
                 // Check if already scanned
-                if (scannedCompletions.indexOf(qrData.id) !== -1) {
+                if (scannedCompletions.indexOf(qrData.woCompletionId) !== -1) {
                     showMessage({
                         title: 'Duplicate Scan',
                         message: 'This completion has already been scanned for this fulfillment',
@@ -149,7 +148,7 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
                 }
 
                 // Check if completion is already fulfilled
-                var statusCheck = QRLib.checkCompletionStatus(qrData.id);
+                var statusCheck = QRLib.checkCompletionStatus(qrData.woCompletionId);
                 if (statusCheck.isScanned) {
                     showMessage({
                         title: 'Already Fulfilled',
@@ -160,7 +159,7 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
                 }
 
                 // Find matching item line
-                var lineMatch = QRLib.findMatchingLine(rec, qrData.item, qrData.loc);
+                var lineMatch = QRLib.findMatchingLine(rec, qrData.itemId, qrData.locationId);
                 if (!lineMatch.found) {
                     showMessage({
                         title: 'Item Not Found',
@@ -177,7 +176,7 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
                 // We only store the reference and show a message here.
 
                 // Add to scanned completions
-                scannedCompletions.push(qrData.id);
+                scannedCompletions.push(qrData.woCompletionId);
                 updateCompletionReferences(rec);
 
                 // Show success message
@@ -198,62 +197,7 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
             }
         }
 
-        /**
-         * Populate fulfillment line with QR data
-         * 
-         * NOTE: This is currently disabled in Client Script to bypass mandatory 
-         * inventory detail validation in the browser. 
-         * Population is handled server-side in UE_ItemFulfillment_AuditTrail.js (beforeSubmit).
-         *
-         * @param {Object} rec - Current record
-         * @param {number} lineNumber - Line number to populate
-         * @param {Object} qrData - Parsed QR data
-         */
-        function populateFulfillmentLine(rec, lineNumber, qrData) {
-            console.log('Skipping line population in Client Script (handled server-side)');
-            return;
-        }
 
-        /**
-         * Populate inventory detail (lots/serials) for current line
-         * 
-         * NOTE: This is currently disabled in Client Script due to NetSuite limitations
-         * (selectNewLine not supported on inventoryassignment sublist in Client Scripts).
-         * Logic moved to server-side UE_ItemFulfillment_AuditTrail.js (beforeSubmit).
-         *
-         * @param {Object} rec - Current record
-         * @param {Object} qrData - Parsed QR data
-         */
-        function populateInventoryDetail(rec, qrData) {
-            console.log('Skipping inventory detail population in Client Script (handled server-side)');
-            return;
-        }
-
-        /**
-         * Clear existing inventory assignments
-         *
-         * @param {Object} invDetailSubrecord - Inventory detail subrecord
-         */
-        function clearInventoryAssignments(invDetailSubrecord) {
-            try {
-                var lineCount = invDetailSubrecord.getLineCount({
-                    sublistId: 'inventoryassignment'
-                });
-
-                // Remove lines in reverse order
-                for (var i = lineCount - 1; i >= 0; i--) {
-                    invDetailSubrecord.removeLine({
-                        sublistId: 'inventoryassignment',
-                        line: i
-                    });
-                }
-
-                console.log('Cleared', lineCount, 'existing inventory assignments');
-
-            } catch (e) {
-                console.error('Error clearing inventory assignments:', e.message);
-            }
-        }
 
         /**
          * Update completion references field
@@ -333,14 +277,23 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
          */
         function saveRecord(context) {
             try {
-                var rec = context.currentRecord;
+                const rec = context.currentRecord;
 
-                // Update completion references one final time
-                if (scannedCompletions.length > 0) {
-                    updateCompletionReferences(rec);
+                // rec.setValue({
+                //     fieldId: 'custbody_scan_qr',
+                //     value: '',
+                //     ignoreFieldChange: true
+                // });
 
-                    console.log('Saving fulfillment with', scannedCompletions.length, 'scanned completions');
-                }
+                // rec.setValue({
+                //     fieldId: 'custbody_wo_completion_ref',
+                //     value: ''
+                // });
+
+                // rec.setValue({
+                //     fieldId: 'custbody_qr_scan_count',
+                //     value: ''
+                // })
 
                 return true; // Allow save
 
@@ -451,10 +404,10 @@ define(['N/currentRecord', 'N/ui/message', 'N/log', 'N/url', 'N/https', '../lib/
         }
 
         return {
-            pageInit: pageInit,
-            fieldChanged: fieldChanged,
-            validateLine: validateLine,
-            saveRecord: saveRecord,
-            processQRScans: processQRScans
+            pageInit,
+            fieldChanged,
+            processQRScans,
+            // saveRecord
+            // validateLine,
         };
     });

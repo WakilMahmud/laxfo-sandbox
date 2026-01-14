@@ -21,8 +21,8 @@
  *      - Can be called from custom buttons, workflows, or console
  */
 
-define(['N/url', 'N/currentRecord', 'N/ui/message'],
-    function(url, currentRecord, message) {
+define(['N/url', 'N/currentRecord', 'N/ui/message', 'N/search'],
+    function (url, currentRecord, message, search) {
 
         /**
          * Page Init event handler
@@ -53,6 +53,85 @@ define(['N/url', 'N/currentRecord', 'N/ui/message'],
                     } else {
                         console.log('QR Code not yet generated - will be available after page refresh');
                     }
+
+                    // //TODO: Checking 
+                    // var inventorySubrecord = currentRec.getSubrecord({
+                    //     fieldId: 'inventorydetail'
+                    // });
+
+
+                    // // Get number of inventory assignment lines
+                    // const lineCount = inventorySubrecord.getLineCount({
+                    //     sublistId: 'inventoryassignment'
+                    // });
+
+                    // const item = inventorySubrecord.getValue({
+                    //     fieldId: 'item'
+                    // });
+
+                    // console.log({ item });
+
+
+                    // const fieldIds = [
+                    //     'binnumber',
+                    //     'expirationdate',
+                    //     'internalid',
+                    //     'inventorydetail',
+                    //     'inventorystatus',
+                    //     'issueinventorynumber',
+                    //     'receiptinventorynumber',
+                    //     'lotquantityavailable',
+                    //     'packcarton',
+                    //     'pickcarton',
+                    //     'quantity',
+                    //     'quantityavailable',
+                    //     'quantitystaged',
+                    //     'tobinnumber',
+                    //     'toinventorystatus'
+                    // ]
+
+                    // for (let i = 0; i < lineCount; i++) {
+
+                    //     fieldIds.forEach(fieldId => {
+                    //         const value = inventorySubrecord.getSublistValue({
+                    //             sublistId: 'inventoryassignment',
+                    //             fieldId: fieldId,
+                    //             line: i
+                    //         }) || '';
+
+                    //         console.log({
+                    //             [fieldId]: value
+                    //         });
+                    //     })
+                    // }
+
+
+                    // var lotSearch = search.create({
+                    //     type: 'inventorynumber',
+                    //     filters: [
+                    //         ['inventorynumber', 'is', "D"],
+                    //         'AND',
+                    //         ['item', 'anyof', 3188],
+                    //         'AND',
+                    //         ['location', 'anyof', 5]
+                    //     ],
+                    //     columns: [
+                    //         search.createColumn({ name: 'internalid' }),  // ← 4144
+                    //         search.createColumn({ name: 'inventorynumber' }),
+                    //         search.createColumn({ name: 'quantityavailable' })
+                    //     ]
+                    // });
+
+                    // var result = lotSearch.run().getRange({ start: 0, end: 1 })[0];
+
+                    // if (result) {
+                    //     var lotId = result.getValue('internalid');
+                    //     console.log('Resolved Lot', {
+                    //         id: lotId,                // 4144
+                    //         availableQty: result.getValue('quantityavailable')
+                    //     });
+                    // }
+
                 } else {
                     console.log('Record not saved yet - QR Code will be generated after save');
                 }
@@ -173,6 +252,7 @@ define(['N/url', 'N/currentRecord', 'N/ui/message'],
                 return true; // Allow save even if error
             }
         }
+
 
         return {
             pageInit: pageInit,
