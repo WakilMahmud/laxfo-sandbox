@@ -135,36 +135,27 @@ define(['N/search', 'N/log'],
             }
         }
 
-        /**
-         * Find matching item line on fulfillment
-         *
-         * @param {Object} fulfillmentRecord - Current fulfillment record
-         * @param {string} itemId - Item internal ID from QR
-         * @param {string} locationId - Location internal ID from QR (optional)
-         * @returns {Object} { found: boolean, lineNumber: number, error: string }
-         */
-        function findMatchingLine(fulfillmentRecord, itemId, locationId) {
-            var result = {
+
+        function findMatchingLine(soRecord, itemId, locationId) {
+            const result = {
                 found: false,
                 lineNumber: -1,
                 error: ''
             };
 
             try {
-                var lineCount = fulfillmentRecord.getLineCount({
-                    sublistId: 'item'
-                });
+                const lineCount = soRecord.getLineCount({ sublistId: 'item' });
 
-                for (var i = 0; i < lineCount; i++) {
-                    var lineItem = fulfillmentRecord.getSublistValue({
+                for (let i = 0; i < lineCount; i++) {
+                    const lineItem = soRecord.getSublistValue({
                         sublistId: 'item',
                         fieldId: 'item',
                         line: i
                     });
 
-                    var lineLocation = fulfillmentRecord.getSublistValue({
+                    const lineLocation = soRecord.getSublistValue({
                         sublistId: 'item',
-                        fieldId: 'location',
+                        fieldId: 'inventorylocation',
                         line: i
                     });
 
@@ -182,7 +173,7 @@ define(['N/search', 'N/log'],
                 }
 
                 // No match found
-                result.error = 'Item not found on this fulfillment';
+                result.error = 'Item not found on this sales order record';
 
             } catch (e) {
                 result.error = 'Error finding item line: ' + e.message;
@@ -367,8 +358,8 @@ define(['N/search', 'N/log'],
         return {
             parseQRData: parseQRData,
             validateQRStructure: validateQRStructure,
-            checkCompletionStatus: checkCompletionStatus,
             findMatchingLine: findMatchingLine,
+            checkCompletionStatus: checkCompletionStatus,
             lookupInventoryNumber: lookupInventoryNumber,
             formatErrorMessage: formatErrorMessage,
             buildInventoryAssignments: buildInventoryAssignments,
