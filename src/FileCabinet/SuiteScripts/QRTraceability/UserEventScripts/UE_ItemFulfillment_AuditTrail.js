@@ -32,12 +32,10 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime'],
         function afterSubmit(context) {
             try {
                 // Only process on CREATE and EDIT
-                if (context.type === context.UserEventType.DELETE) {
-                    return;
-                }
+                if (context.type !== context.UserEventType.CREATE && context.type !== context.UserEventType.EDIT) return;
 
-                var fulfillmentRecord = context.newRecord;
-                var fulfillmentId = fulfillmentRecord.id;
+                const fulfillmentRecord = context.newRecord;
+                const fulfillmentId = fulfillmentRecord.id;
 
                 log.audit({
                     title: 'Audit Trail Processing Started',
@@ -45,9 +43,7 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime'],
                 });
 
                 // Get scanned completion references
-                var completionRefs = fulfillmentRecord.getValue({
-                    fieldId: 'custbody_wo_completion_ref'
-                });
+                const completionRefs = fulfillmentRecord.getValue({ fieldId: 'custbody_wo_completion_ref' });
 
                 if (!completionRefs) {
                     log.debug('No Scanned Completions', 'No QR scans found for this fulfillment');
@@ -70,15 +66,12 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime'],
                 var processedCount = 0;
                 var errorCount = 0;
 
-                for (var i = 0; i < completionIds.length; i++) {
-                    var completionId = completionIds[i];
+                for (let i = 0; i < completionIds.length; i++) {
+                    let completionId = completionIds[i];
 
                     try {
                         // Mark completion as fulfilled
                         markCompletionAsFulfilled(completionId, fulfillmentId);
-
-                        // Create audit log entry (if custom record exists)
-                        createAuditLogEntry(completionId, fulfillmentId, fulfillmentRecord);
 
                         processedCount++;
 
@@ -228,212 +221,8 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime'],
             }
         }
 
-        /**
-         * Create audit log entry (if custom record exists)
-         *
-         * @param {string} completionId - Completion internal ID
-         * @param {string} fulfillmentId - Fulfillment internal ID
-         * @param {record.Record} fulfillmentRecord - Fulfillment record
-         */
-        function createAuditLogEntry(completionId, fulfillmentId, fulfillmentRecord) {
-            try {
-                // Get completion details for audit log
-                var completionData = getCompletionData(completionId);
-
-                // Create audit log record
-                // Note: Comment out if custom record is not created
-                var auditLog = record.create({
-                    type: 'customrecord_qr_scan_log',
-                    isDynamic: false
-                });
-
-                auditLog.setValue({
-                    fieldId: 'custrecord_scan_completion',
-                    value: completionId
-                });
-
-                auditLog.setValue({
-                    fieldId: 'custrecord_scan_fulfillment',
-                    value: fulfillmentId
-                });
-
-                auditLog.setValue({
-                    fieldId: 'custrecord_scan_datetime',
-                    value: new Date()
-                });
-
-                auditLog.setValue({
-                    fieldId: 'custrecord_scan_user',
-                    value: runtime.getCurrentUser().id
-                });
-
-                if (completionData) {
-                    auditLog.setValue({
-                        fieldId: 'custrecord_scan_item',
-                        value: completionData.itemId
-                    });
-
-                    auditLog.setValue({
-                        fieldId: 'custrecord_scan_qty',
-                        value: completionData.quantity
-                    });
-
-                    auditLog.setValue({
-                        fieldId: 'custrecord_scan_lot',
-                        value: completionData.lotNumber || ''
-                    });
-                }
-
-                var logId = auditLog.save();
-
-                log.debug({
-                    title: 'Audit Log Created',
-                    details: 'Log ID: ' + logId + ' | Completion: ' + completionId + ' | Fulfillment: ' + fulfillmentId
-                });
-
-            } catch (e) {
-                // Don't fail if custom record doesn't exist
-                log.debug({
-                    title: 'Audit Log Not Created',
-                    details: 'Custom record may not exist. Error: ' + e.message
-                });
-            }
-        }
-
-        /**
-         * Get completion data for audit log
-         *
-         * @param {string} completionId - Completion internal ID
-         * @returns {Object|null} Completion data
-         */
-        function getCompletionData(completionId) {
-            try {
-                var completionSearch = search.create({
-                    type: 'workordercompletion',
-                    filters: [
-                        ['internalid', 'is', completionId],
-                        'AND',
-                        ['mainline', 'is', 'T']
-                    ],
-                    columns: [
-                        'item',
-                        'quantity',
-                        'custbody_qr_payload'
-                    ]
-                });
-
-                var completionData = null;
-
-                completionSearch.run().each(function (result) {
-                    var qrPayload = result.getValue({ name: 'custbody_qr_payload' });
-                    var lotNumber = '';
-
-                    // Try to extract lot from QR payload
-                    if (qrPayload) {
-                        try {
-                            var payload = JSON.parse(qrPayload);
-                            if (payload.lots && payload.lots.length > 0) {
-                                lotNumber = payload.lots[0].num;
-                            } else if (payload.serials && payload.serials.length > 0) {
-                                lotNumber = payload.serials.map(function (s) { return s.num; }).join(', ');
-                            }
-                        } catch (e) {
-                            // Ignore parse errors
-                        }
-                    }
-
-                    completionData = {
-                        itemId: result.getValue({ name: 'item' }),
-                        quantity: parseFloat(result.getValue({ name: 'quantity' }) || 0),
-                        lotNumber: lotNumber
-                    };
-
-                    return false;
-                });
-
-                return completionData;
-
-            } catch (e) {
-                log.error('Error Getting Completion Data', e.message);
-                return null;
-            }
-        }
-
-        /**
-         * Before Submit event handler
-         * Optional: Add validation before save
-         *
-         * @param {Object} context
-         */
-        function beforeSubmit(context) {
-            // Reserved for future validation logic
-            // Example: Verify all scanned completions are valid
-
-            // if (context.type !== context.UserEventType.CREATE && context.type !== context.UserEventType.EDIT) return;
-
-            // var rec = context.newRecord;  // or context.oldRecord + load if needed
-
-            // var itemCount = rec.getLineCount({ sublistId: 'item' });
-            // log.debug('Item lines', itemCount);
-
-            // for (var i = 0; i < itemCount; i++) {
-            //     // Optional: only process specific lines
-            //     // if (someCondition) continue;
-
-            //     var invDetail = rec.getSublistSubrecord({
-            //         sublistId: 'item',
-            //         fieldId: 'inventorydetail',
-            //         line: i
-            //     });
-
-            //     if (!invDetail) {
-            //         // If no subrecord exists yet, create it (dynamic mode usually works server-side)
-            //         invDetail = rec.getSublistSubrecord({
-            //             sublistId: 'item',
-            //             fieldId: 'inventorydetail',
-            //             line: i
-            //         });
-            //         // In many cases NetSuite auto-creates it when needed
-            //     }
-
-            //     // Clear existing lines if needed (careful!)
-            //     // var assignCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
-            //     // for (var j = assignCount - 1; j >= 0; j--) {
-            //     //     invDetail.removeLine({ sublistId: 'inventoryassignment', line: j });
-            //     // }
-
-            //     invDetail.selectNewLine({ sublistId: 'inventoryassignment' });
-            //     invDetail.setCurrentSublistValue({
-            //         sublistId: 'inventoryassignment',
-            //         fieldId: 'issueinventorynumber',
-            //         value: '4144'  // ← your inventory number internal id
-            //     });
-            //     invDetail.setCurrentSublistValue({
-            //         sublistId: 'inventoryassignment',
-            //         fieldId: 'binnumber',
-            //         value: '1'     // ← internal id or string if text-based
-            //     });
-            //     invDetail.setCurrentSublistValue({
-            //         sublistId: 'inventoryassignment',
-            //         fieldId: 'inventorystatus',
-            //         value: '1'
-            //     });
-            //     invDetail.setCurrentSublistValue({
-            //         sublistId: 'inventoryassignment',
-            //         fieldId: 'quantity',
-            //         value: 1
-            //     });
-            //     invDetail.commitLine({ sublistId: 'inventoryassignment' });
-
-            //     rec.commitLine({
-            //         sublistId: 'item'
-            //     });
-            // }
-
-        }
 
         return {
-            afterSubmit: afterSubmit,
-            beforeSubmit: beforeSubmit  // Uncomment if needed
+            afterSubmit
         };
     });

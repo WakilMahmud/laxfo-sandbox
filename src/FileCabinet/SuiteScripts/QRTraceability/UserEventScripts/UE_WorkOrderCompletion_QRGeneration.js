@@ -192,7 +192,7 @@ define(['N/record', 'N/search', 'N/log', 'N/url'],
                     values: {
                         custbody_qr_payload: payloadString,
                         custbody_qr_image: qrImageUrl,
-                        // custbody_qr_scanned: false
+                        custbody_qr_scanned: false
                     },
                     options: {
                         enableSourcing: false,

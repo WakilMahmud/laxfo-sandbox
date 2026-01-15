@@ -16,6 +16,7 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
         // Module-level variables
         let scannedCompletions = []; // Track completions scanned in this session
         let currentMessage = null; // Track current UI message
+        let batchQrCode = [];
 
         function pageInit(context) {
             try {
@@ -35,12 +36,12 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                     }
                 }
 
-                // Clear scan field on load
-                rec.setValue({
-                    fieldId: 'custbody_scan_qr',
-                    value: '',
-                    ignoreFieldChange: true
-                });
+                // // Clear scan field on load
+                // rec.setValue({
+                //     fieldId: 'custbody_scan_qr',
+                //     value: '',
+                //     ignoreFieldChange: true
+                // });
 
                 showMessage({
                     title: 'QR Scanner Ready',
@@ -80,17 +81,17 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                     return;
                 }
 
-                console.log('QR Scanned:', scanValue);
+                // console.log('QR Scanned:', scanValue);
 
                 // Process the scanned QR code
                 processQRScan(rec, scanValue);
 
                 // Clear scan field for next scan
-                // rec.setValue({
-                //     fieldId: 'custbody_scan_qr',
-                //     value: '',
-                //     ignoreFieldChange: true
-                // });
+                rec.setValue({
+                    fieldId: 'custbody_scan_qr',
+                    value: '',
+                    ignoreFieldChange: true
+                });
 
             } catch (e) {
                 console.error('Error in fieldChanged:', e.message);
@@ -123,6 +124,7 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
 
                 var qrData = parseResult.data;
                 console.log('Parsed QR Data:', qrData);
+                console.log({ scannedCompletions });
 
                 // Check if already scanned
                 if (scannedCompletions.indexOf(qrData.woCompletionId) !== -1) {
@@ -136,6 +138,7 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
 
                 // Check if completion is already fulfilled
                 var statusCheck = QRLib.checkCompletionStatus(qrData.woCompletionId);
+
                 if (statusCheck.isScanned) {
                     showMessage({
                         title: 'Already Fulfilled',
@@ -150,7 +153,7 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                 if (!lineMatch.found) {
                     showMessage({
                         title: 'Item Not Found',
-                        message: 'Item "' + qrData.itemName + '" is not on this fulfillment',
+                        message: 'Item "' + qrData.itemName + '" is not on sales order',
                         type: message.Type.ERROR
                     });
                     return;
@@ -160,6 +163,8 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
 
                 // Add to scanned completions
                 scannedCompletions.push(qrData.woCompletionId);
+                batchQrCode.push(qrData);
+
                 updateCompletionReferences(rec);
 
                 // Show success message
@@ -189,20 +194,17 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
          */
         function updateCompletionReferences(rec) {
             try {
-                var refsString = JSON.stringify(scannedCompletions);
+                const refsString = JSON.stringify(scannedCompletions);
+                const batchQrCodeString = JSON.stringify(batchQrCode);
+
                 rec.setValue({
                     fieldId: 'custbody_wo_completion_ref',
                     value: refsString
                 });
 
-                // Update scan count
-                var currentCount = rec.getValue({
-                    fieldId: 'custbody_qr_scan_count'
-                }) || 0;
-
                 rec.setValue({
-                    fieldId: 'custbody_qr_scan_count',
-                    value: currentCount + 1
+                    fieldId: 'custbody_batch_qr_code',
+                    value: batchQrCodeString
                 });
 
             } catch (e) {

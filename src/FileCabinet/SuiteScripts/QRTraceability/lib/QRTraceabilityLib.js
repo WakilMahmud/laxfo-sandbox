@@ -98,28 +98,21 @@ define(['N/search', 'N/log'],
          * @returns {Object} { isScanned: boolean, fulfillmentId: string }
          */
         function checkCompletionStatus(completionId) {
+            let isScanned = false;
+            let fulfillmentId = '';
+
             try {
-                var completionSearch = search.create({
+                const searchResult = search.lookupFields({
                     type: 'workordercompletion',
-                    filters: [
-                        ['internalid', 'is', completionId],
-                        'AND',
-                        ['mainline', 'is', 'T']
-                    ],
-                    columns: [
-                        'custbody_qr_scanned',
-                        'custbody_qr_linked_fulfillment'
-                    ]
+                    id: completionId,
+                    columns: ['custbody_qr_scanned', 'custbody_qr_linked_fulfillment']
                 });
 
-                var isScanned = false;
-                var fulfillmentId = '';
+                console.log({ searchResult });
 
-                completionSearch.run().each(function (result) {
-                    isScanned = result.getValue({ name: 'custbody_qr_scanned' }) === 'T';
-                    fulfillmentId = result.getValue({ name: 'custbody_qr_linked_fulfillment' }) || '';
-                    return false; // Only need first result
-                });
+                isScanned = searchResult?.custbody_qr_scanned
+                fulfillmentId = searchResult?.custbody_qr_linked_fulfillment[0]?.value
+
 
                 return {
                     isScanned: isScanned,
@@ -183,27 +176,21 @@ define(['N/search', 'N/log'],
             return result;
         }
 
-        /**
-         * Format user-friendly error message
-         *
-         * @param {string} errorType - Type of error
-         * @param {Object} details - Error details
-         * @returns {string} Formatted error message
-         */
-        function formatErrorMessage(errorType, details) {
-            var messages = {
-                'PARSE_ERROR': 'Invalid QR code format. Please scan again.',
-                'ALREADY_SCANNED': 'This completion has already been fulfilled (Fulfillment #' + (details.fulfillmentId || '') + ')',
-                'ITEM_NOT_FOUND': 'Item "' + (details.itemName || '') + '" is not on this fulfillment',
-                'LOCATION_MISMATCH': 'Location mismatch - QR: ' + (details.qrLocation || '') + ', Line: ' + (details.lineLocation || ''),
-                'LOT_NOT_FOUND': 'Lot number "' + (details.lotNumber || '') + '" not found in inventory',
-                'SERIAL_NOT_FOUND': 'Serial number "' + (details.serialNumber || '') + '" not found in inventory',
-                'INSUFFICIENT_QTY': 'Insufficient quantity available',
-                'GENERAL_ERROR': 'Error processing QR code: ' + (details.message || 'Unknown error')
-            };
 
-            return messages[errorType] || messages['GENERAL_ERROR'];
-        }
+        // function formatErrorMessage(errorType, details) {
+        //     var messages = {
+        //         'PARSE_ERROR': 'Invalid QR code format. Please scan again.',
+        //         'ALREADY_SCANNED': 'This completion has already been fulfilled (Fulfillment #' + (details.fulfillmentId || '') + ')',
+        //         'ITEM_NOT_FOUND': 'Item "' + (details.itemName || '') + '" is not on this fulfillment',
+        //         'LOCATION_MISMATCH': 'Location mismatch - QR: ' + (details.qrLocation || '') + ', Line: ' + (details.lineLocation || ''),
+        //         'LOT_NOT_FOUND': 'Lot number "' + (details.lotNumber || '') + '" not found in inventory',
+        //         'SERIAL_NOT_FOUND': 'Serial number "' + (details.serialNumber || '') + '" not found in inventory',
+        //         'INSUFFICIENT_QTY': 'Insufficient quantity available',
+        //         'GENERAL_ERROR': 'Error processing QR code: ' + (details.message || 'Unknown error')
+        //     };
+
+        //     return messages[errorType] || messages['GENERAL_ERROR'];
+        // }
 
 
 
@@ -212,7 +199,7 @@ define(['N/search', 'N/log'],
             parseQRData: parseQRData,
             validateQRStructure: validateQRStructure,
             findMatchingLine: findMatchingLine,
-            formatErrorMessage: formatErrorMessage,
-            checkCompletionStatus: checkCompletionStatus
+            checkCompletionStatus: checkCompletionStatus,
+            // formatErrorMessage: formatErrorMessage,
         };
     });
