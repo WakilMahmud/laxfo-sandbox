@@ -18,6 +18,8 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
         let currentMessage = null; // Track current UI message
         let batchQrCode = [];
 
+        const scanQrField = document.getElementById('custbody_scan_qr');
+
         function pageInit(context) {
             try {
                 const rec = context.currentRecord;
@@ -35,13 +37,6 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                         scannedCompletions = [];
                     }
                 }
-
-                // // Clear scan field on load
-                // rec.setValue({
-                //     fieldId: 'custbody_scan_qr',
-                //     value: '',
-                //     ignoreFieldChange: true
-                // });
 
                 showMessage({
                     title: 'QR Scanner Ready',
@@ -92,6 +87,8 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                     value: '',
                     ignoreFieldChange: true
                 });
+
+                if (scanQrField) scanQrField.focus();
 
             } catch (e) {
                 console.error('Error in fieldChanged:', e.message);

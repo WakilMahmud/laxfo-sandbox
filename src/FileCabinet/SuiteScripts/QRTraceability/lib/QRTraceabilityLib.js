@@ -108,10 +108,10 @@ define(['N/search', 'N/log'],
                     columns: ['custbody_qr_scanned', 'custbody_qr_linked_fulfillment']
                 });
 
-                console.log({ searchResult });
-
                 isScanned = searchResult?.custbody_qr_scanned
                 fulfillmentId = searchResult?.custbody_qr_linked_fulfillment[0]?.value
+
+                console.log({ isScanned, fulfillmentId });
 
 
                 return {

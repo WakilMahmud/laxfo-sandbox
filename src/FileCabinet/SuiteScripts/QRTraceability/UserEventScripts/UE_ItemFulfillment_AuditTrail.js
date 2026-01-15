@@ -18,8 +18,8 @@
  *   4. Create audit log records (if custom record exists)
  */
 
-define(['N/record', 'N/search', 'N/log', 'N/runtime'],
-    function (record, search, log, runtime) {
+define(['N/record', 'N/search', 'N/log'],
+    function (record, search, log) {
 
         /**
          * After Submit event handler
@@ -97,38 +97,19 @@ define(['N/record', 'N/search', 'N/log', 'N/runtime'],
             }
         }
 
-        /**
-         * Parse completion references from JSON or comma-separated string
-         *
-         * @param {string} completionRefs - Completion references
-         * @returns {Array} Array of completion IDs
-         */
         function parseCompletionRefs(completionRefs) {
-            var completionIds = [];
+            let completionIds = [];
 
             try {
-                // Try parsing as JSON array
-                var parsed = JSON.parse(completionRefs);
-                if (Array.isArray(parsed)) {
-                    completionIds = parsed;
-                } else {
-                    completionIds = [parsed];
-                }
+                completionIds = completionRefs ? JSON.parse(completionRefs) : [];
+                return completionIds;
             } catch (e) {
-                // If not JSON, try comma-separated
-                completionIds = completionRefs.split(',').map(function (id) {
-                    return id.trim();
-                }).filter(function (id) {
-                    return id !== '';
+                log.error({
+                    title: 'Error in parse completion ref',
+                    details: e.message
                 });
+                throw e;
             }
-
-            // Filter out invalid IDs
-            completionIds = completionIds.filter(function (id) {
-                return id && !isNaN(id);
-            });
-
-            return completionIds;
         }
 
         /**
