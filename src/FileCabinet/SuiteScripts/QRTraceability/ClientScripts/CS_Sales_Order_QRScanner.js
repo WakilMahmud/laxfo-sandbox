@@ -16,7 +16,7 @@ define(['N/ui/message', "N/ui/dialog", '../lib/QRTraceabilityLib'],
         // Module-level variables
         let scannedCompletions = []; // Track completions scanned in this session
         let currentMessage = null; // Track current UI message
-        let batchQrCode = [];
+        let batchQrCode = {};
 
         const scanQrField = document.getElementById('custbody_scan_qr');
 
@@ -141,7 +141,22 @@ define(['N/ui/message', "N/ui/dialog", '../lib/QRTraceabilityLib'],
 
                 // Add to scanned completions
                 scannedCompletions.push(qrData.woCompletionId);
-                batchQrCode.push(qrData);
+                // batchQrCode.push(qrData);
+
+
+                //TODO: Need a map that will track currently scanned qrData to which line item, which will be used to set inventory detail subrecord from sales order ue.
+                /*
+                    {
+                        "#line2": {qrData[1]},
+                        "#line0": {qrData[2]}
+                    }
+
+                */
+
+                batchQrCode[lineMatch.lineNumber] = qrData;
+
+
+
 
                 updateCompletionReferences(rec);
 
