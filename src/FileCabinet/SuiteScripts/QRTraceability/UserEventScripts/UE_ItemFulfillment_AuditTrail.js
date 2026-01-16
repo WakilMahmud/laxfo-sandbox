@@ -166,27 +166,17 @@ define(['N/record', 'N/search', 'N/log'],
          */
         function getCompletionStatus(completionId) {
             try {
-                var completionSearch = search.create({
+                let isScanned = false;
+                let fulfillmentId = '';
+
+                const searchResult = search.lookupFields({
                     type: 'workordercompletion',
-                    filters: [
-                        ['internalid', 'is', completionId],
-                        'AND',
-                        ['mainline', 'is', 'T']
-                    ],
-                    columns: [
-                        'custbody_qr_scanned',
-                        'custbody_qr_linked_fulfillment'
-                    ]
+                    id: completionId,
+                    columns: ['custbody_qr_scanned', 'custbody_qr_linked_fulfillment']
                 });
 
-                var isScanned = false;
-                var fulfillmentId = '';
-
-                completionSearch.run().each(function (result) {
-                    isScanned = result.getValue({ name: 'custbody_qr_scanned' }) === 'T';
-                    fulfillmentId = result.getValue({ name: 'custbody_qr_linked_fulfillment' }) || '';
-                    return false;
-                });
+                isScanned = searchResult?.custbody_qr_scanned;
+                fulfillmentId = searchResult?.custbody_qr_linked_fulfillment[0]?.value;
 
                 return {
                     isScanned: isScanned,
@@ -201,7 +191,6 @@ define(['N/record', 'N/search', 'N/log'],
                 };
             }
         }
-
 
         return {
             afterSubmit
