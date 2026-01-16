@@ -10,8 +10,8 @@
  *   - QRTraceabilityLib.js
  */
 
-define(['N/ui/message', '../lib/QRTraceabilityLib'],
-    function (message, QRLib) {
+define(['N/ui/message', "N/ui/dialog", '../lib/QRTraceabilityLib'],
+    function (message, dialog, QRLib) {
 
         // Module-level variables
         let scannedCompletions = []; // Track completions scanned in this session
@@ -22,30 +22,22 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
 
         function pageInit(context) {
             try {
-                const rec = context.currentRecord;
+                const soRecord = context.currentRecord;
 
                 // Load previously scanned completions if record is being edited
-                const completionRefs = rec.getValue({ fieldId: 'custbody_wo_completion_ref' });
+                const completionRefs = soRecord.getValue({ fieldId: 'custbody_wo_completion_ref' });
 
-                if (completionRefs) {
-                    try {
-                        scannedCompletions = JSON.parse(completionRefs);
-                        if (!Array.isArray(scannedCompletions)) {
-                            scannedCompletions = [];
-                        }
-                    } catch (e) {
-                        scannedCompletions = [];
-                    }
+                scannedCompletions = completionRefs ? JSON.parse(completionRefs) : [];
+                // console.log('QR Scanner initialized. Previously scanned:', scannedCompletions);
+
+                const lineCount = soRecord.getLineCount({ sublistId: 'item' });
+
+                if (lineCount) {
+                    dialog.alert({
+                        title: 'QR Scanner Ready',
+                        message: 'Scan QR codes from Work Order Completions to update inventory detail.'
+                    });
                 }
-
-                showMessage({
-                    title: 'QR Scanner Ready',
-                    message: 'Scan QR codes from Work Order Completions to auto-populate lines',
-                    type: message.Type.INFORMATION,
-                    duration: 3000
-                });
-
-                console.log('QR Scanner initialized. Previously scanned:', scannedCompletions);
 
             } catch (e) {
                 console.error('Error in pageInit:', e.message);
@@ -68,9 +60,7 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                     return;
                 }
 
-                var scanValue = rec.getValue({
-                    fieldId: 'custbody_scan_qr'
-                });
+                const scanValue = rec.getValue({ fieldId: 'custbody_scan_qr' });
 
                 if (!scanValue || scanValue.trim() === '') {
                     return;
@@ -91,11 +81,9 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
                 if (scanQrField) scanQrField.focus();
 
             } catch (e) {
-                console.error('Error in fieldChanged:', e.message);
-                showMessage({
-                    title: 'Error',
-                    message: 'Error processing scan: ' + e.message,
-                    type: message.Type.ERROR
+                dialog.alert({
+                    title: "Error",
+                    message: "Error processing scan: " + e.message
                 });
             }
         }
@@ -108,50 +96,43 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
          */
         function processQRScan(rec, scanValue) {
             try {
-                // Parse QR data
-                var parseResult = QRLib.parseQRData(scanValue);
+                const parseResult = QRLib.parseQRData(scanValue);
                 if (!parseResult.success) {
-                    showMessage({
-                        title: 'Invalid QR Code',
-                        message: parseResult.error,
-                        type: message.Type.ERROR
+                    dialog.alert({
+                        title: "Invalid QR Code",
+                        message: parseResult.error
                     });
                     return;
                 }
 
-                var qrData = parseResult.data;
-                console.log('Parsed QR Data:', qrData);
-                console.log({ scannedCompletions });
+                const qrData = parseResult.data;
 
                 // Check if already scanned
-                if (scannedCompletions.indexOf(qrData.woCompletionId) !== -1) {
-                    showMessage({
-                        title: 'Duplicate Scan',
-                        message: 'This completion has already been scanned for this fulfillment',
-                        type: message.Type.WARNING
+                if (scannedCompletions.includes(qrData.woCompletionId)) {
+                    dialog.alert({
+                        title: "Duplicate Scan",
+                        message: `The completion #${qrData.tranId} has already been scanned.`
                     });
                     return;
                 }
 
                 // Check if completion is already fulfilled
-                var statusCheck = QRLib.checkCompletionStatus(qrData.woCompletionId);
+                const statusCheck = QRLib.checkCompletionStatus(qrData.woCompletionId);
 
                 if (statusCheck.isScanned) {
-                    showMessage({
-                        title: 'Already Fulfilled',
-                        message: 'This completion has already been fulfilled in another order',
-                        type: message.Type.ERROR
+                    dialog.alert({
+                        title: "Already Fulfilled",
+                        message: `This completion #${qrData.tranId} has already been fulfilled in another order.`
                     });
                     return;
                 }
 
                 // Find matching item line
-                var lineMatch = QRLib.findMatchingLine(rec, qrData.itemId, qrData.locationId);
+                const lineMatch = QRLib.findMatchingLine(rec, qrData.itemId, qrData.locationId);
                 if (!lineMatch.found) {
-                    showMessage({
-                        title: 'Item Not Found',
-                        message: 'Item "' + qrData.itemName + '" is not on sales order',
-                        type: message.Type.ERROR
+                    dialog.alert({
+                        title: "Item Not Found",
+                        message: 'Item "' + qrData.itemName + '" is not on sales order.'
                     });
                     return;
                 }
@@ -174,10 +155,10 @@ define(['N/ui/message', '../lib/QRTraceabilityLib'],
 
             } catch (e) {
                 console.error('Error processing QR scan:', e.message);
-                showMessage({
-                    title: 'Processing Error',
-                    message: 'Error: ' + e.message,
-                    type: message.Type.ERROR
+
+                dialog.alert({
+                    title: "Processing Error",
+                    message: 'Error: ' + e.message
                 });
             }
         }
