@@ -101,13 +101,16 @@ define(['N/record', 'N/render'], (record, render) => {
                     font-weight: bold;
                     background-color: #e6e6e6;
                     font-size: 10px;
+
+                    letter-spacing: normal;
+                    word-spacing: normal;
+                    white-space: nowrap;
                 }
 
                 .item-table td, th {
                     border: 0.5px solid #ffffffff;
                     text-align: center;
                 }
-
 
                 .signature-table{
                     margin-top: 300px;
@@ -149,61 +152,61 @@ define(['N/record', 'N/render'], (record, render) => {
                             <td style="width: 50%; vertical-align: top; text-align: right;">
                                 <table style="width: 100%; border-collapse: collapse;">
                                     <tr>
-                                    <td>
-                                        <p style="
-                                            width: 100%;
-                                            text-align: right;
-                                            font-size: 14pt;
-                                            font-weight: bold;
-                                            font-style: italic;
-                                            margin: 0;"
-                                        >
-                                            Purchase Requisition
-                                        </p>
+                                        <td>
+                                            <p style="
+                                                width: 100%;
+                                                text-align: right;
+                                                font-size: 14pt;
+                                                font-weight: bold;
+                                                font-style: italic;
+                                                margin: 0;"
+                                            >
+                                                Purchase Requisition
+                                            </p>
 
-                                        <p style="
-                                            width: 100%;
-                                            text-align: right;
-                                            font-size: 12pt;
-                                            margin: 6px 0 0 0;"
-                                        >
-                                            #${requistionNumber}
-                                        </p>
+                                            <p style="
+                                                width: 100%;
+                                                text-align: right;
+                                                font-size: 12pt;
+                                                margin: 6px 0 0 0;"
+                                            >
+                                                #${requistionNumber}
+                                            </p>
 
-                                        <p style="
-                                            width: 100%;
-                                            text-align: right;
-                                            font-size: 8pt;
-                                            margin-top: 4px;"
-                                        >
-                                            ${date}
-                                        </p>
+                                            <p style="
+                                                width: 100%;
+                                                text-align: right;
+                                                font-size: 8pt;
+                                                margin-top: 4px;"
+                                            >
+                                                ${date}
+                                            </p>
 
-                                        <p style="
-                                            width: 100%;
-                                            background: #e6e6e6;
-                                            text-align: center;
-                                            font-style: italic;
-                                            font-size: 9pt;
-                                            padding: 6px 0 3px 0;
-                                            margin: 6px 0 0 80px;"
-                                        >
-                                            Requested Department
-                                        </p>
+                                            <p style="
+                                                width: 100%;
+                                                background: #e6e6e6;
+                                                text-align: center;
+                                                font-style: italic;
+                                                font-size: 9pt;
+                                                padding: 6px 0 3px 0;
+                                                margin: 6px 0 0 80px;"
+                                            >
+                                                Requested Department
+                                            </p>
 
-                                        <p style="
-                                            width: 100%;
-                                            background: #e6e6e6;
-                                            text-align: center;
-                                            font-style: italic;
-                                            font-weight: bold;
-                                            font-size: 9pt;
-                                            padding: 6px 0 3px 0;
-                                            margin: 6px 0 0 80px;"
-                                        >
-                                            ${department}
-                                        </p>
-                                    </td>
+                                            <p style="
+                                                width: 100%;
+                                                background: #e6e6e6;
+                                                text-align: center;
+                                                font-style: italic;
+                                                font-weight: bold;
+                                                font-size: 9pt;
+                                                padding: 6px 0 3px 0;
+                                                margin: 6px 0 0 80px;"
+                                            >
+                                                ${department}
+                                            </p>
+                                        </td>
                                     </tr>
 
                                 </table>
