@@ -16,8 +16,8 @@
  * - Available Without Login: No
  */
 
-define(['N/record', 'N/search', 'N/log', 'N/ui/serverWidget', 'N/encode'],
-    function (record, search, log, serverWidget, encode) {
+define(['N/record', 'N/log', 'N/encode'],
+    function (record, log, encode) {
 
         /**
          * Handles GET request - displays QR code for printing
@@ -40,42 +40,34 @@ define(['N/record', 'N/search', 'N/log', 'N/ui/serverWidget', 'N/encode'],
             }
         }
 
-        /**
-         * Handle GET request
-         *
-         * @param {Object} context
-         */
+
         function handleGet(context) {
-            var completionId = context.request.parameters.id;
+            const completionId = context.request.parameters.id;
 
             if (!completionId) {
                 context.response.write('<h2>Error</h2><p>Missing completion ID parameter</p>');
                 return;
             }
 
-            // Load completion record
-            var completionRecord = record.load({
+            const completionRecord = record.load({
                 type: 'workordercompletion',
                 id: completionId
             });
 
-            // Get QR payload
-            var qrPayload = completionRecord.getValue({
-                fieldId: 'custbody_qr_payload'
-            });
+            const qrPayload = completionRecord.getValue({ fieldId: 'custbody_qr_payload' });
+
 
             if (!qrPayload) {
                 context.response.write('<h2>Error</h2><p>QR payload not found for this completion</p>');
                 return;
             }
 
-            // Get completion details for display
-            var completionData = getCompletionDetails(completionRecord);
+            const completionData = getCompletionDetails(completionRecord);
 
-            // Generate HTML page with QR code
-            var html = generateQRPage(qrPayload, completionData);
+            context.response.write(JSON.stringify(completionData));
 
-            // Write response
+            const html = generateQRPage(qrPayload, completionData);
+
             context.response.write(html);
         }
 
@@ -90,11 +82,11 @@ define(['N/record', 'N/search', 'N/log', 'N/ui/serverWidget', 'N/encode'],
             return {
                 id: completionRecord.id,
                 tranNumber: completionRecord.getValue({ fieldId: 'tranid' }) || '',
-                workOrder: completionRecord.getText({ fieldId: 'createdfrom' }) || '',
+                workOrder: completionRecord.getText({ fieldId: 'createdfrom' }).split(" ")[2] || '',
                 item: completionRecord.getText({ fieldId: 'item' }) || '',
                 quantity: completionRecord.getValue({ fieldId: 'quantity' }) || '',
                 location: completionRecord.getText({ fieldId: 'location' }) || '',
-                date: completionRecord.getValue({ fieldId: 'trandate' }) || ''
+                date: completionRecord.getText({ fieldId: 'trandate' }) || ''
             };
         }
 
@@ -106,177 +98,153 @@ define(['N/record', 'N/search', 'N/log', 'N/ui/serverWidget', 'N/encode'],
          * @returns {string} HTML content
          */
         function generateQRPage(qrPayload, completionData) {
-            // Parse payload to get compact data (used for display only)
-            var payloadObj;
             try {
-                payloadObj = JSON.parse(qrPayload);
-            } catch (e) {
-                log.error('QR Payload Parse Error', e.message);
-                return '<h2>Error</h2><p>Invalid QR payload format</p>';
-            }
+                // Parse payload to get compact data (used for display only)
+                let payloadObj;
 
-            // *** FIX 1: Base64 encode the payload on the server-side ***
-            // This ensures the string is safe to embed in the HTML/JavaScript without syntax errors.
-            var encodedPayload = encode.convert({
-                string: qrPayload,
-                inputEncoding: encode.Encoding.UTF_8,
-                outputEncoding: encode.Encoding.BASE_64
-            });
-            log.debug('Encoded QR Payload Size', encodedPayload.length + ' characters');
+                try {
+                    payloadObj = JSON.parse(qrPayload);
+                } catch (error) {
+                    throw new Error("QR Payload Parse Error");
+                }
 
-            var qrImageUrl = null; // Always use JavaScript QR generation
-            log.debug('QR Generation Method', 'Using JavaScript library (qrcodejs) for all QR codes');
 
-            var html = '<!DOCTYPE html>';
-            html += '<html>';
-            html += '<head>';
-            html += '<title>QR Code - ' + completionData.tranNumber + '</title>';
-            html += '<style>';
-            html += 'body { font-family: Arial, sans-serif; margin: 20px; }';
-            html += '.container { max-width: 600px; margin: 0 auto; }';
-            html += '.header { text-align: center; margin-bottom: 20px; }';
-            html += '.qr-container { text-align: center; margin: 30px 0; }';
-            html += '.qr-image { border: 2px solid #333; padding: 10px; display: inline-block; }';
-            html += '.details { background-color: #f5f5f5; padding: 15px; border-radius: 5px; }';
-            html += '.details table { width: 100%; border-collapse: collapse; }';
-            html += '.details td { padding: 8px; border-bottom: 1px solid #ddd; }';
-            html += '.details td:first-child { font-weight: bold; width: 40%; }';
-            html += '.buttons { text-align: center; margin-top: 20px; }';
-            html += '.btn { padding: 10px 20px; margin: 5px; font-size: 14px; cursor: pointer; }';
-            html += '.btn-print { background-color: #4CAF50; color: white; border: none; }';
-            html += '.btn-close { background-color: #f44336; color: white; border: none; }';
-            html += '@media print {';
-            html += '  .buttons { display: none; }';
-            html += '  .no-print { display: none; }';
-            html += '}';
-            html += '</style>';
+                // *** FIX 1: Base64 encode the payload on the server-side ***
+                // This ensures the string is safe to embed in the HTML/JavaScript without syntax errors.
+                const encodedPayload = encode.convert({
+                    string: qrPayload,
+                    inputEncoding: encode.Encoding.UTF_8,
+                    outputEncoding: encode.Encoding.BASE_64
+                });
+                log.debug('Encoded QR Payload Size', encodedPayload.length + ' characters');
 
-            // Add QR code library
-            html += '<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>';
 
-            html += '</head>';
-            html += '<body>';
-            html += '<div class="container">';
 
-            // Header
-            html += '<div class="header">';
-            html += '<h1>Work Order Completion QR Code</h1>';
-            html += '<p class="no-print">Scan this QR code during Item Fulfillment</p>';
-            html += '</div>';
+                var html = '<!DOCTYPE html>';
+                html += '<html>';
+                html += '<head>';
+                html += '<title>QR Code - ' + completionData.tranNumber + '</title>';
+                html += '<style>';
+                html += 'body { font-family: Arial, sans-serif; margin: 20px; }';
+                html += '.container { max-width: 600px; margin: 0 auto; }';
+                html += '.header { text-align: center; margin-bottom: 20px; }';
+                html += '.qr-container { text-align: center; margin: 30px 0; }';
+                html += '.qr-image { border: 2px solid #333; padding: 10px; display: inline-block; }';
+                html += '.details { background-color: #f5f5f5; padding: 15px; border-radius: 5px; }';
+                html += '.details table { width: 100%; border-collapse: collapse; }';
+                html += '.details td { padding: 8px; border-bottom: 1px solid #ddd; }';
+                html += '.details td:first-child { font-weight: bold; width: 40%; }';
+                html += '.buttons { text-align: center; margin-top: 20px; }';
+                html += '.btn { padding: 10px 20px; margin: 5px; font-size: 14px; cursor: pointer; }';
+                html += '.btn-print { background-color: #4CAF50; color: white; border: none; }';
+                html += '.btn-close { background-color: #f44336; color: white; border: none; }';
+                html += '@media print {';
+                html += '  .buttons { display: none; }';
+                html += '  .no-print { display: none; }';
+                html += '}';
+                html += '</style>';
 
-            // QR Code
-            html += '<div class="qr-container">';
-            html += '<div class="qr-image" id="qrcode-container">';
-            html += '<div id="qrcode"></div>'; // Target for JavaScript QR generation
-            html += '</div>';
-            html += '</div>';
+                // Add QR code library
+                html += '<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>';
 
-            // Completion Details
-            html += '<div class="details">';
-            html += '<h3>Completion Details</h3>';
-            html += '<table>';
-            html += '<tr><td>Completion #:</td><td>' + escapeHtml(completionData.tranNumber) + '</td></tr>';
-            html += '<tr><td>Work Order:</td><td>' + escapeHtml(completionData.workOrder) + '</td></tr>';
-            html += '<tr><td>Item:</td><td>' + escapeHtml(completionData.item) + '</td></tr>';
-            html += '<tr><td>Quantity:</td><td>' + escapeHtml(completionData.quantity) + '</td></tr>';
-            html += '<tr><td>Location:</td><td>' + escapeHtml(completionData.location) + '</td></tr>';
-            html += '<tr><td>Date:</td><td>' + escapeHtml(completionData.date) + '</td></tr>';
-            html += '</table>';
-            html += '</div>';
+                html += '</head>';
+                html += '<body>';
+                html += '<div class="container">';
 
-            // Lot/Serial Info if present
-            if (payloadObj.lots || payloadObj.serials) {
-                html += '<div class="details" style="margin-top: 15px;">';
-                html += '<h3>Inventory Detail</h3>';
+                // Header
+                html += '<div class="header">';
+                html += '<h1>Work Order Completion QR Code</h1>';
+                html += '<p class="no-print">Scan this QR code during Item Fulfillment</p>';
+                html += '</div>';
+
+                // QR Code
+                html += '<div class="qr-container">';
+                html += '<div class="qr-image" id="qrcode-container">';
+                html += '<div id="qrcode"></div>'; // Target for JavaScript QR generation
+                html += '</div>';
+                html += '</div>';
+
+                // Completion Details
+                html += '<div class="details">';
+                html += '<h3>Completion Details</h3>';
                 html += '<table>';
-
-                if (payloadObj.lots && payloadObj.lots.length > 0) {
-                    html += '<tr><td>Lot Numbers:</td><td>';
-                    var lotNums = payloadObj.lots.map(function (lot) {
-                        return lot.num + ' (Qty: ' + lot.qty + ')';
-                    }).join(', ');
-                    html += escapeHtml(lotNums);
-                    html += '</td></tr>';
-                }
-
-                if (payloadObj.serials && payloadObj.serials.length > 0) {
-                    html += '<tr><td>Serial Numbers:</td><td>';
-                    var serialNums = payloadObj.serials.map(function (serial) {
-                        return serial.num;
-                    }).join(', ');
-                    html += escapeHtml(serialNums);
-                    html += '</td></tr>';
-                }
-
-                if (payloadObj.bins && payloadObj.bins.length > 0) {
-                    html += '<tr><td>Bins:</td><td>' + escapeHtml(payloadObj.bins.join(', ')) + '</td></tr>';
-                }
-
+                html += '<tr><td>Completion #:</td><td>' + escapeHtml(completionData.tranNumber) + '</td></tr>';
+                html += '<tr><td>Work Order:</td><td>' + escapeHtml(completionData.workOrder) + '</td></tr>';
+                html += '<tr><td>Item:</td><td>' + escapeHtml(completionData.item) + '</td></tr>';
+                html += '<tr><td>Quantity:</td><td>' + escapeHtml(completionData.quantity) + '</td></tr>';
+                html += '<tr><td>Location:</td><td>' + escapeHtml(completionData.location) + '</td></tr>';
+                html += '<tr><td>Date:</td><td>' + escapeHtml(completionData.date) + '</td></tr>';
                 html += '</table>';
                 html += '</div>';
+
+
+                // Buttons
+                html += '<div class="buttons">';
+                html += '<button class="btn btn-print" onclick="window.print()">Print QR Code</button>';
+                html += '<button class="btn btn-close" onclick="window.close()">Close</button>';
+                html += '</div>';
+
+                // Instructions
+                html += '<div class="no-print" style="margin-top: 30px; padding: 15px; background-color: #e7f3ff; border-left: 4px solid #2196F3;">';
+                html += '<h4 style="margin-top: 0;">Instructions:</h4>';
+                html += '<ol>';
+                html += '<li>Print this page or save as PDF</li>';
+                html += '<li>Attach to completed items or packaging</li>';
+                html += '<li>In Sales Order, scan this QR code into the "Scan QR Code" field.</li>';
+                html += '<li>Item details will auto-populate on the fulfillment line</li>';
+                html += '</ol>';
+                html += '</div>';
+
+                html += '</div>'; // Close container
+
+                // Add JavaScript for QR generation and error handling
+                html += '<script>';
+
+                // *** FIX 2: Embed the Base64 string safely ***
+                html += 'var b64QrData = "' + encodedPayload + '";';
+                html += 'console.log("Base64 Encoded QR Data size:", b64QrData.length, "characters");';
+
+                // Removed handleImageError since we are only using JS generation now
+
+                // Function to generate QR with JavaScript
+                html += 'function generateQRWithJavaScript() {';
+                html += '  try {';
+                html += '    console.log("Generating QR code with JavaScript library");';
+
+                // *** FIX 3: Decode Base64 payload back to original JSON string using native JS atob() ***
+                html += '    var qrData = atob(b64QrData);';
+                html += '    console.log("QR Data size after decoding:", qrData.length, "characters");';
+
+                html += '    var qrcode = new QRCode(document.getElementById("qrcode"), {';
+                html += '      text: qrData,'; // Use the decoded string
+                html += '      width: 300,';
+                html += '      height: 300,';
+                html += '      colorDark: "#000000",';
+                html += '      colorLight: "#ffffff",';
+                html += '      correctLevel: QRCode.CorrectLevel.M';
+                html += '    });';
+                html += '    console.log("QR code generated successfully with JavaScript");';
+                html += '  } catch(e) {';
+                html += '    console.error("JavaScript QR generation failed:", e);';
+                html += '    document.getElementById("qrcode").innerHTML = "<p style=\\"color:red\\">Error: " + e.message + "</p>";';
+                html += '  }';
+                html += '}';
+
+                // Always call the JS generation on load
+                html += 'window.onload = function() { generateQRWithJavaScript(); };';
+
+                html += '</script>';
+
+                html += '</body>';
+                html += '</html>';
+
+                return html;
+
+            } catch (error) {
+                return `<h2>Error</h2>
+                        <p>${error.message}</p>
+                        `;
             }
-
-            // Buttons
-            html += '<div class="buttons">';
-            html += '<button class="btn btn-print" onclick="window.print()">Print QR Code</button>';
-            html += '<button class="btn btn-close" onclick="window.close()">Close</button>';
-            html += '</div>';
-
-            // Instructions
-            html += '<div class="no-print" style="margin-top: 30px; padding: 15px; background-color: #e7f3ff; border-left: 4px solid #2196F3;">';
-            html += '<h4 style="margin-top: 0;">Instructions:</h4>';
-            html += '<ol>';
-            html += '<li>Print this page or save as PDF</li>';
-            html += '<li>Attach to completed items or packaging</li>';
-            html += '<li>During fulfillment, scan this QR code into the "Scan QR Code" field</li>';
-            html += '<li>Item details will auto-populate on the fulfillment line</li>';
-            html += '</ol>';
-            html += '</div>';
-
-            html += '</div>'; // Close container
-
-            // Add JavaScript for QR generation and error handling
-            html += '<script>';
-
-            // *** FIX 2: Embed the Base64 string safely ***
-            html += 'var b64QrData = "' + encodedPayload + '";';
-            html += 'console.log("Base64 Encoded QR Data size:", b64QrData.length, "characters");';
-
-            // Removed handleImageError since we are only using JS generation now
-
-            // Function to generate QR with JavaScript
-            html += 'function generateQRWithJavaScript() {';
-            html += '  try {';
-            html += '    console.log("Generating QR code with JavaScript library");';
-
-            // *** FIX 3: Decode Base64 payload back to original JSON string using native JS atob() ***
-            html += '    var qrData = atob(b64QrData);';
-            html += '    console.log("QR Data size after decoding:", qrData.length, "characters");';
-
-            html += '    var qrcode = new QRCode(document.getElementById("qrcode"), {';
-            html += '      text: qrData,'; // Use the decoded string
-            html += '      width: 300,';
-            html += '      height: 300,';
-            html += '      colorDark: "#000000",';
-            html += '      colorLight: "#ffffff",';
-            html += '      correctLevel: QRCode.CorrectLevel.M';
-            html += '    });';
-            html += '    console.log("QR code generated successfully with JavaScript");';
-            html += '  } catch(e) {';
-            html += '    console.error("JavaScript QR generation failed:", e);';
-            html += '    document.getElementById("qrcode").innerHTML = "<p style=\\"color:red\\">Error: " + e.message + "</p>";';
-            html += '  }';
-            html += '}';
-
-            // Always call the JS generation on load
-            html += 'window.onload = function() { generateQRWithJavaScript(); };';
-
-            html += '</script>';
-
-            html += '</body>';
-            html += '</html>';
-
-            return html;
         }
 
         /**
