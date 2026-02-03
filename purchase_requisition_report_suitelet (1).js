@@ -8,10 +8,8 @@ define(['N/record', 'N/render'], (record, render) => {
     const ITEM_BRAND = 'custcol_item_brand';
     const ITEM_ORIGIN = 'custcol_item_origin';
     const PO_TYPE = 'custbody_po_type';
-
-    const NEXT_APPROVER = 'custbody1';
+    const NEXT_APPROVER = 'nextapprover';
     const REQUESTOR = 'entity';
-
 
     const onRequest = (context) => {
         const { response } = context;
@@ -25,7 +23,7 @@ define(['N/record', 'N/render'], (record, render) => {
                 return;
             }
 
-            const companyLogo = escapeXml("https://9385847.app.netsuite.com/core/media/media.nl?id=7853&c=9385847&h=hp5WbyveV5Uwq550CVJYB-QSOKHrz-yoFVkUj1pR9HJIxosk");
+            const companyLogo = escapeXml("https://9900118.app.netsuite.com/core/media/media.nl?id=4260&c=9900118&h=BnZqGqXI-UZE-oqUpmGamNPB0m7WgCQkkDhlMQ0UpURoA3Yd");
 
             const purchaseRequisitionRecord = record.load({ type: recordType, id: recordId, isdynamic: false });
 
@@ -301,3 +299,4 @@ define(['N/record', 'N/render'], (record, render) => {
 
     return { onRequest };
 });
+
