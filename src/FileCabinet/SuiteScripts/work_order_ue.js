@@ -12,9 +12,9 @@ define(['N/record', 'N/ui/serverWidget'], (record, serverWidget) => {
             const form = scriptContext.form;
 
             form.addButton({
-                id: 'custpage_see_items',
-                label: 'See Items',
-                functionName: 'seeItems'
+                id: 'custpage_see_item',
+                label: 'See Item',
+                functionName: 'seeItem'
             });
 
             form.clientScriptModulePath = 'SuiteScripts/work_order_cs';

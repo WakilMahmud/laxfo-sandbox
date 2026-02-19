@@ -5,7 +5,7 @@
  */
 define(['N/url', 'N/currentRecord'], function (url, currentRecord) {
 
-    function seeItems() {
+    function seeItem() {
         try {
             const currentRec = currentRecord.get();
             const woId = currentRec.id;
@@ -31,7 +31,7 @@ define(['N/url', 'N/currentRecord'], function (url, currentRecord) {
     }
 
     return {
-        seeItems
+        seeItem
     };
 
 });

@@ -8,6 +8,12 @@ define(['N/record', 'N/search'], (record, search) => {
     const cellStyle = "border: 1px solid black; padding: 8px; text-align: center; vertical-align: middle";
     const headerStyle = "border: 1px solid black; padding: 8px; text-align: center; vertical-align: middle; background-color: #f2f2f2;";
 
+    const BASE_NO_FIELD_ID = "";
+    const WORK_ORDER_FIELD_ID = "tranid";
+    const ASSEMBLY_ITEM_FIELD_ID = "assemblyitem";
+    const PRODUCTION_DATE_FIELD_ID = "trandate";
+    const QUANTITY_FIELD_ID = "quantity";
+
 
     const onRequest = (scriptContext) => {
         try {
@@ -34,6 +40,12 @@ define(['N/record', 'N/search'], (record, search) => {
                 id: woId,
                 isDynamic: false
             });
+
+            const baseNo = woRecord.getText({ fieldId: BASE_NO_FIELD_ID });
+            const workOrder = woRecord.getValue({ fieldId: WORK_ORDER_FIELD_ID });
+            const assemblyItem = woRecord.getText({ fieldId: ASSEMBLY_ITEM_FIELD_ID });
+            const productionDate = woRecord.getText({ fieldId: PRODUCTION_DATE_FIELD_ID });
+            const quantity = woRecord.getValue({ fieldId: QUANTITY_FIELD_ID });
 
 
             const opSearch = search.create({
@@ -155,7 +167,7 @@ define(['N/record', 'N/search'], (record, search) => {
                     itemId,
                     item,
                     unit,
-                    costCategory: '',
+                    costCategory: 'Raw Material', // Hard Coded for component item
                     quantity,
                     cost: (averageCost * quantity) + (quantity * totalOperationItemRate)
                 });
@@ -166,9 +178,57 @@ define(['N/record', 'N/search'], (record, search) => {
             // scriptContext.response.write(`<p>${JSON.stringify(allItems)}</p>`);
 
 
+            const headerHtml = `
+                                <style>
+                                    /* Flexbox container to align items */
+                                    .header-container {
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: flex-start;
+                                        width: 100%;
+                                    }
 
+                                    /* Styling for the blue button */
+                                    .btn-blue {
+                                        padding: 10px 20px; 
+                                        cursor: pointer; 
+                                        background-color: #007bff; 
+                                        color: white; 
+                                        border: none; 
+                                        border-radius: 4px; 
+                                        font-weight: bold;
+                                    }
 
+                                    @media print {
+                                        .no-print {
+                                            display: none !important;
+                                        }
+                                        @page {
+                                            margin: 0;
+                                        }
+                                        body {
+                                            margin: 1.6cm;
+                                        }
+                                    }
+                                </style>
 
+                                <h1 style="text-align: center;">Item Cost Report</h1>
+
+                                <div class="header-container">
+                                    <div>
+                                        <p>Base No: ${baseNo}</p>
+                                        <p>Work Order No: ${workOrder}</p>
+                                        <p>Item Code: ${assemblyItem}</p>
+                                        <p>Production Date: ${productionDate}</p>
+                                        <p>Production Quantity: ${quantity}</p>
+                                    </div>
+
+                                    <button class="no-print btn-blue" onclick="window.print()">
+                                        Print Report
+                                    </button>
+                                </div>
+                                <br/>
+                            `;
 
 
             const tableHtml = `
@@ -188,12 +248,17 @@ define(['N/record', 'N/search'], (record, search) => {
                                                     <td style="${cellStyle}">${item.unit}</td>
                                                     <td style="${cellStyle}">${item.costCategory}</td>
                                                     <td style="${cellStyle}">${item.quantity}</td>
-                                                    <td style="${cellStyle}">${Number(item.cost).toFixed(2)}</td>
+                                                    <td style="${cellStyle}">${item.cost ? Number(item.cost).toFixed(2) : ''}</td>
                                                 </tr>`).join('')}
+
+                        <tr>
+                            <td style="text-align: right; padding: 8px; font-weight: bold;" colspan="4">Total Cost</td>
+                            <td style="${cellStyle}">${allItems.reduce((acc, item) => acc + (item.cost ? item.cost : 0), 0).toFixed(2)}</td>
+                        </tr>
                         </tbody>
                     </table>`;
 
-            scriptContext.response.write(tableHtml);
+            scriptContext.response.write(headerHtml + tableHtml);
 
 
         } catch (error) {
