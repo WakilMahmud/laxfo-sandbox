@@ -8,7 +8,7 @@ define(['N/record', 'N/search'], (record, search) => {
     const cellStyle = "border: 1px solid black; padding: 8px; text-align: center; vertical-align: middle";
     const headerStyle = "border: 1px solid black; padding: 8px; text-align: center; vertical-align: middle; background-color: #f2f2f2;";
 
-    const BASE_NO_FIELD_ID = "";
+    const BASE_NO_FIELD_ID = "custbody_batch_number";
     const WORK_ORDER_FIELD_ID = "tranid";
     const ASSEMBLY_ITEM_FIELD_ID = "assemblyitem";
     const PRODUCTION_DATE_FIELD_ID = "trandate";
@@ -56,7 +56,6 @@ define(['N/record', 'N/search'], (record, search) => {
                 ]
             });
 
-            let totalOperationItemRate = 0;
 
             // Run paged to handle high volume
             const pagedData = opSearch.runPaged({ pageSize: 1000 });
@@ -68,7 +67,6 @@ define(['N/record', 'N/search'], (record, search) => {
                     const details = {
                         id: result.getValue('internalid'),
                     };
-                    // console.log({ details });
 
 
                     const manufacturingOperationTaskRecord = record.load({
@@ -77,11 +75,13 @@ define(['N/record', 'N/search'], (record, search) => {
                         isDynamic: false,
                     });
 
+                    const completedQuantity = manufacturingOperationTaskRecord.getValue({ fieldId: "completedquantity" });
+
+
                     const costDetailLineCount = manufacturingOperationTaskRecord.getLineCount({
                         sublistId: "costdetail"
                     })
 
-                    // console.log({ costDetailLineCount });
 
                     for (let i = 0; i < costDetailLineCount; i++) {
                         const itemId = manufacturingOperationTaskRecord.getSublistValue({
@@ -108,22 +108,20 @@ define(['N/record', 'N/search'], (record, search) => {
                             line: i
                         });
 
-                        totalOperationItemRate += runrate;
 
 
                         allItems.push({
                             itemId,
                             item,
                             unit: '',
-                            costCategory,
-                            quantity: 1,
-                            cost: runrate
+                            costCategory: costCategory.replace("WIP for ", ""),
+                            quantity: completedQuantity,
+                            cost: runrate,
+                            amount: completedQuantity * runrate
                         });
                     }
                 });
             });
-
-
 
             const itemLineCount = woRecord.getLineCount({ sublistId: "item" });
 
@@ -160,23 +158,18 @@ define(['N/record', 'N/search'], (record, search) => {
                 });
 
 
-                // console.log({ itemId, item, averageCost });
-                // console.log({ averageCost, quantity, totalOperationItemRate });
-
                 allItems.push({
                     itemId,
                     item,
                     unit,
-                    costCategory: 'Raw Material', // Hard Coded for component item
+                    costCategory: 'Raw Material Cost', // Hard Coded for component item
                     quantity,
-                    cost: (averageCost * quantity) + (quantity * totalOperationItemRate)
+                    cost: averageCost,
+                    amount: averageCost * quantity
                 });
             }
 
-            // log.debug("Info", { allItems, totalOperationItemRate });
-
-            // scriptContext.response.write(`<p>${JSON.stringify(allItems)}</p>`);
-
+            // cost: (averageCost * quantity) + (quantity * totalOperationItemRate)
 
             const headerHtml = `
                                 <style>
@@ -212,7 +205,8 @@ define(['N/record', 'N/search'], (record, search) => {
                                     }
                                 </style>
 
-                                <h1 style="text-align: center;">Item Cost Report</h1>
+                                <h2 style="text-align: center;">Item Cost Report</h2>
+                                <h3 style="text-align: center;">DBL Digital Limited</h3>
 
                                 <div class="header-container">
                                     <div>
@@ -224,12 +218,14 @@ define(['N/record', 'N/search'], (record, search) => {
                                     </div>
 
                                     <button class="no-print btn-blue" onclick="window.print()">
-                                        Print Report
+                                        Print
                                     </button>
                                 </div>
                                 <br/>
                             `;
 
+            const totalAmount = allItems.reduce((acc, item) => acc + (item.amount ? item.amount : 0), 0).toFixed(2);
+            const productionCostPerUnit = (totalAmount / quantity).toFixed(2);
 
             const tableHtml = `
                     <table style="border-collapse: collapse; width: 100%; margin-top: 20px; border: 1px solid black;">
@@ -240,6 +236,7 @@ define(['N/record', 'N/search'], (record, search) => {
                                 <th style="${headerStyle}">Cost Category</th>
                                 <th style="${headerStyle}">Quantity</th>
                                 <th style="${headerStyle}">Cost</th>
+                                <th style="${headerStyle}">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -249,11 +246,20 @@ define(['N/record', 'N/search'], (record, search) => {
                                                     <td style="${cellStyle}">${item.costCategory}</td>
                                                     <td style="${cellStyle}">${item.quantity}</td>
                                                     <td style="${cellStyle}">${item.cost ? Number(item.cost).toFixed(2) : ''}</td>
+                                                    <td style="${cellStyle}">${item.amount ? Number(item.amount).toFixed(2) : ''}</td>
                                                 </tr>`).join('')}
 
                         <tr>
-                            <td style="text-align: right; padding: 8px; font-weight: bold;" colspan="4">Total Cost</td>
-                            <td style="${cellStyle}">${allItems.reduce((acc, item) => acc + (item.cost ? item.cost : 0), 0).toFixed(2)}</td>
+                            <td style="text-align: right; padding: 8px; font-weight: bold;" colspan="5">Total Amount</td> 
+                            <td style="border: 1px solid black; text-align: center; padding: 8px; font-weight: bold;">${totalAmount}</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: right; padding: 8px; font-weight: bold;" colspan="5">Total Production</td>
+                            <td style="${cellStyle}">${quantity}</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: right; padding: 8px; font-weight: bold;" colspan="5">Production Cost Per Unit</td>
+                            <td style="${cellStyle}">${productionCostPerUnit}</td>
                         </tr>
                         </tbody>
                     </table>`;
